@@ -48,5 +48,5 @@ awstats/
 !/storage/app/.empty
 !/storage/framework/.empty
 !/storage/logs/.empty
-
+/storage/framework/sessions/*
 
