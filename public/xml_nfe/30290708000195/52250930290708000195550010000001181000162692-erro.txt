@@ -1,0 +1,1 @@
+Erro de comunicação via soap,  Connection timed out after 20003 milliseconds [https://nfe.sefaz.go.gov.br/nfe/services/NFeAutorizacao4]

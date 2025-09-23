@@ -1,0 +1,11 @@
+Massa de testes (Ambiente HOM)
+
+CPF/CNPJ (document 1): 10027788083  - Ficará aguardando a geração do pedido “order”
+
+CPF/CNPJ (document 2): 78259015099  - Ficará aguardando o agendamento (já como “order”) criado
+
+CPF/CNPJ (document 3): 30136981011  - Ficará aguardando a videochamada (já com o “scheduling” criado)
+
+CPF/CNPJ (document 4): 57191570008  - Ficará aguardando a emissão (já com a “video chamada” realizada) 
+
+CPF/CNPJ (document 5): 31642415006  - Simula cenário que já foi realizado o agendamento, a video chamada, e está pronto para emitir o certificado (canIssue = true)

@@ -1,0 +1,110 @@
+{
+	"info": {
+		"_postman_id": "e6094109-5bdf-450b-aa26-83d321625a11",
+		"name": "Software House digitalid",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "25829730"
+	},
+	"item": [
+		{
+			"name": "Request Certificate (PJ)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"callBackResponseUrl\": \"https://digitalid.gestao.plus/loja/pos-order-detail?t=\",\n    \"callBackUrl\": \"https://suaaplicacao.com.br?q=desisti%20do%20checkout\",\n    \"utm\": {\n   \t \"createId\": true\n    },\n    \"sku\": 21,\n    \"user\": {\n        \"document\": \"00031642415006\",\n        \"name\": \"GOSIGNER ASSINATURAS E IDENTIFICACAO DIGITAL DO BRASIL LTDA\",\n        \"email\": \"contato@gosigner.com.br\",\n        \"cellphone\": \"62991838359\",\n        \"zipCode\": \"7423030\",\n        \"address\": \"Sala 123B\",\n        \"number\": \"1478\",\n        \"neighborhood\": \"Setor Bueno\",\n        \"addressDetail\": \"Avenida T4\",\n        \"city\": \"Goiania\",\n        \"state\": \"GO\"\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:10000/request-certificate",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "10000",
+					"path": [
+						"request-certificate"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Check Request Certificate",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://127.0.0.1:10000/check-request-certificate?utmId=b5734f70-7a30-11ed-adc6-a7f2a7103ba3&target=check-avaiable",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "10000",
+					"path": [
+						"check-request-certificate"
+					],
+					"query": [
+						{
+							"key": "utmId",
+							"value": "b5734f70-7a30-11ed-adc6-a7f2a7103ba3"
+						},
+						{
+							"key": "target",
+							"value": "check-avaiable"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Issue Certificate",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"Username\": \"113D22071435BAFE 00031642415006\",\n  \"Password\": \"Apresentacao123@\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:10000/issue-certificate?returnType=base64",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "10000",
+					"path": [
+						"issue-certificate"
+					],
+					"query": [
+						{
+							"key": "returnType",
+							"value": "base64"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
