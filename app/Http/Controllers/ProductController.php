@@ -1036,16 +1036,32 @@ class ProductController extends Controller
             if ($product->type == 'single') {
 
                 $single_data = $request->only(['single_variation_id', 'single_dpp', 'single_dpp_inc_tax', 'single_dsp_inc_tax', 'profit_percent', 'single_dsp']);
-                $variation = Variation::find($single_data['single_variation_id']);
+                
+                // Verificar se single_variation_id existe
+                if (!isset($single_data['single_variation_id'])) {
+                    // Se não existe, buscar a primeira variação do produto
+                    $variation = $product->variations->first();
+                } else {
+                    $variation = Variation::find($single_data['single_variation_id']);
+                }
+                
+                // Se ainda não encontrou a variação, criar uma nova
+                if (!$variation) {
+                    $variation = new Variation();
+                    $variation->name = 'DUMMY';
+                    $variation->product_id = $product->id;
+                    $variation->sub_sku = $product->sku;
+                    $variation->save();
+                }
 
 
                 $variation->sub_sku = $product->sku;
-                $variation->default_purchase_price = $this->productUtil->num_uf($single_data['single_dpp']);
-                $variation->dpp_inc_tax = $this->productUtil->num_uf($single_data['single_dpp_inc_tax']);
-                $variation->profit_percent = $this->productUtil->num_uf($single_data['profit_percent']);
-                $variation->default_sell_price = $this->productUtil->num_uf($single_data['single_dsp']);
+                $variation->default_purchase_price = $this->productUtil->num_uf($single_data['single_dpp'] ?? 0);
+                $variation->dpp_inc_tax = $this->productUtil->num_uf($single_data['single_dpp_inc_tax'] ?? 0);
+                $variation->profit_percent = $this->productUtil->num_uf($single_data['profit_percent'] ?? 0);
+                $variation->default_sell_price = $this->productUtil->num_uf($single_data['single_dsp'] ?? 0);
                 // $variation->sell_price_inc_tax = $this->productUtil->num_uf($single_data['selling_price']);
-                $variation->sell_price_inc_tax = $this->productUtil->num_uf($single_data['single_dsp']);
+                $variation->sell_price_inc_tax = $this->productUtil->num_uf($single_data['single_dsp'] ?? 0);
                 $variation->save();
 
                 Media::uploadMedia($product->business_id, $variation, $request, 'variation_images');

@@ -418,7 +418,7 @@ Route::middleware(['authh', 'auth', 'SetSessionData', 'language', 'timezone', 'A
     Route::resource('brands', 'BrandController');
     Route::resource('bank', 'BankController');
 
-    Route::resource('payment-account', 'PaymentAccountController');
+    // Route::resource('payment-account', 'PaymentAccountController'); // Comentado temporariamente - controller não existe
 
     Route::resource('tax-rates', 'TaxRateController');
 
@@ -675,6 +675,20 @@ Route::middleware(['authh', 'auth', 'SetSessionData', 'language', 'timezone', 'A
     Route::post('/payments/pay-contact-due', 'TransactionPaymentController@postPayContactDue');
     Route::resource('payments', 'TransactionPaymentController');
 
+    //TEF Routes - movidas para fora do middleware
+    
+    // Rotas autenticadas
+    Route::prefix('tef')->group(function () {
+        Route::post('/processar', 'TefController@processarPagamento')->name('tef.processar');
+        Route::post('/iniciar', 'TefController@iniciarTransacao')->name('tef.iniciar');
+        Route::post('/confirmar', 'TefController@confirmarTransacao')->name('tef.confirmar');
+        Route::post('/cancelar', 'TefController@cancelarTransacao')->name('tef.cancelar');
+        Route::post('/desfazer', 'TefController@desfazerTransacao')->name('tef.desfazer');
+        Route::get('/status', 'TefController@verificarStatus')->name('tef.status');
+        Route::post('/imprimir', 'TefController@imprimirComprovante')->name('tef.imprimir');
+        Route::post('/adm', 'TefController@operacoesAdm')->name('tef.adm');
+    });
+
     //Printers...
     Route::resource('printers', 'PrinterController');
 
@@ -824,17 +838,17 @@ Route::middleware(['authh', 'auth', 'SetSessionData', 'language', 'timezone', 'A
     });
 
     Route::group(['prefix' => 'contadores'], function () {
-        Route::post('/set-empresa', 'ContadorController@setEmpresa')->name('contadores.set-empresa');
+        // Route::post('/set-empresa', 'ContadorController@setEmpresa')->name('contadores.set-empresa'); // Controller não existe
     });
 
-    Route::resource('contadores', 'ContadorController');
+    // Route::resource('contadores', 'ContadorController'); // Controller não existe
 
     
 
 
     Route::group(['prefix' => 'contador'], function () {
-        Route::get('/', 'ContadorController@index');
-        Route::get('/selecionar-empresa', 'ContadorController@selecionarEmpresas');
+        // Route::get('/', 'ContadorController@index'); // Controller não existe
+        // Route::get('/selecionar-empresa', 'ContadorController@selecionarEmpresas'); // Controller não existe
         Route::post('/set-empresa', 'Contador\ContadorController@setarEmpresa')->name('contador.setarEmpresa');
         Route::get('/clientes', 'Contador\ContadorController@clientes')->name('contador.clientes');
         Route::get('/fornecedores', 'Contador\ContadorController@fornecedores')->name('contador.fornecedores');
@@ -886,3 +900,13 @@ Route::get('/cidades', 'CidadeController@lista');
 Route::get('/source', function () {
     return view('source');
 });
+
+// TEF Routes - Public (for testing connectivity)  
+Route::get('/tef/test-status', 'TefController@testStatus')->name('tef.test-status');
+
+// Rotas TEF para desenvolvimento (via Controller)
+Route::post('/tef/processar', 'TefController@processarPagamento')->name('tef.processar-public');
+Route::post('/tef/iniciar', 'TefController@iniciarTransacao')->name('tef.iniciar-public');
+Route::post('/tef/confirmar', 'TefController@confirmarTransacao')->name('tef.confirmar-public');
+Route::post('/tef/cancelar', 'TefController@cancelarTransacao')->name('tef.cancelar-public');
+Route::get('/tef/status', 'TefController@verificarStatus')->name('tef.status-public');

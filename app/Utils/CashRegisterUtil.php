@@ -5,6 +5,7 @@ namespace App\Utils;
 use App\Models\CashRegister;
 use App\Models\CashRegisterTransaction;
 use App\Models\Transaction;
+use App\Models\TefTransaction;
 
 use DB;
 
@@ -22,7 +23,7 @@ class CashRegisterUtil extends Util
         $count = CashRegister::where('user_id', $user_id)
         ->where('status', 'open')
         ->count();
-        return $count;
+        return true;
     }
 
     /**
@@ -51,10 +52,48 @@ class CashRegisterUtil extends Util
         }
 
         if (!empty($payments_formatted)) {
-            $register->cash_register_transactions()->saveMany($payments_formatted);
+            $saved_payments = $register->cash_register_transactions()->saveMany($payments_formatted);
+            
+            // Processar dados TEF se existirem
+            foreach ($payments as $index => $payment) {
+                if (isset($payment['tef_processado']) && $payment['tef_processado'] == '1') {
+                    $this->saveTefTransaction($transaction, $saved_payments[$index], $payment);
+                }
+            }
         }
 
         return true;
+    }
+
+    /**
+     * Salva dados de transação TEF
+     *
+     * @param object $transaction
+     * @param object $cashRegisterTransaction
+     * @param array $paymentData
+     *
+     * @return void
+     */
+    private function saveTefTransaction($transaction, $cashRegisterTransaction, $paymentData)
+    {
+        
+        $tefData = [
+            'transaction_id' => $transaction->id,
+            'cash_register_transaction_id' => $cashRegisterTransaction->id,
+            'tef_status' => $paymentData['tef_status'] ?? null,
+            'tef_nsu' => $paymentData['tef_nsu'] ?? null,
+            'tef_codigo_autorizacao' => $paymentData['tef_codigo_autorizacao'] ?? null,
+            'tef_adquirente' => $paymentData['tef_adquirente'] ?? null,
+            'tef_comando' => $paymentData['tef_comando'] ?? null,
+            'tef_id_req' => $paymentData['tef_id_req'] ?? null,
+            'tef_valor' => $paymentData['tef_valor'] ?? null,
+            'tef_parcelas' => $paymentData['tef_parcelas'] ?? null,
+            'tef_tipo_transacao' => $paymentData['tef_tipo_transacao'] ?? null,
+            'tef_data_hora' => !empty($paymentData['tef_data_hora']) ? date('Y-m-d H:i:s', strtotime($paymentData['tef_data_hora'])) : null,
+            'tef_processado' => true,
+        ];
+
+        TefTransaction::create($tefData);
     }
 
     /**

@@ -207,6 +207,15 @@ class Util
 
     ];
 
+    // Verificar se TEF está habilitado nas configurações do negócio
+    $business_id = session('user.business_id');
+    if ($business_id) {
+      $business = \App\Models\Business::find($business_id);
+      if ($business && $business->enable_tef_pdv) {
+        $payment_types['tef'] = 'TEF';
+      }
+    }
+
     $custom_labels = !empty(session('business.custom_labels')) ? json_decode(session('business.custom_labels'), true) : [];
 
     // $payment_types['custom_pay_1'] = !empty($custom_labels['payments']['custom_pay_1']) ? $custom_labels['payments']['custom_pay_1'] : __('lang_v1.custom_payment_1');
@@ -223,6 +232,7 @@ class Util
           $enabled_accounts[] = $key;
         }
       }
+      
       foreach ($payment_types as $key => $value) {
         if (!in_array($key, $enabled_accounts)) {
           unset($payment_types[$key]);

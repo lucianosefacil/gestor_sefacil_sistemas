@@ -5,6 +5,7 @@
 @section('content')
 <section class="content no-print">
 	<input type="hidden" id="amount_rounding_method" value="{{$pos_settings['amount_rounding_method'] ?? ''}}">
+	<input type="hidden" id="business_ambiente" value="{{auth()->user()->business->ambiente ?? 1}}">
 	@if(!empty($pos_settings['allow_overselling']))
 		<input type="hidden" id="is_overselling_allowed">
 	@endif
@@ -94,6 +95,8 @@
 
 @section('javascript')
 	<script src="{{ asset('js/pos.js?v=' . $asset_v) }}"></script>
+	<script src="{{ asset('js/tef.js?v=' . $asset_v) }}"></script>
+	<script src="{{ asset('js/tef_simple.js?v=' . $asset_v) }}"></script>
 	@include('sale_pos.partials.keyboard_shortcuts')
 
 	<!-- Call restaurant module if defined -->

@@ -383,6 +383,9 @@ class SellPosController extends Controller
      */
     public function store(Request $request)
     {
+        // Preservar dados TEF originais antes de qualquer processamento
+        $original_payment_data = $request->input('payment', []);
+        
         if (!auth()->user()->can('sell.create') && !auth()->user()->can('direct_sell.access')) {
             abort(403, 'Unauthorized action.');
         }
@@ -725,7 +728,9 @@ class SellPosController extends Controller
                     //Add payments to Cash Register
                     // Teste para salvar na tabela cash_register
                     if (!$transaction->is_suspend && !empty($input['payment']) && !$is_credit_sale) {
-                        $this->cashRegisterUtil->addSellPayments($transaction, $input['payment']);
+                        // Usar dados TEF originais se disponíveis
+                        $payment_data_for_register = isset($original_payment_data) ? $original_payment_data : $input['payment'];
+                        $this->cashRegisterUtil->addSellPayments($transaction, $payment_data_for_register);
                     }
 
                     //Update payment status

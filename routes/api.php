@@ -73,5 +73,15 @@ Route::get('/consultaValorPlano/{plano_id}', 'PaymentController@consultaValorPla
 
 Route::get('/test', 'BankController@test');
 
-
+// TEF API Routes
+Route::prefix('tef')->group(function () {
+    Route::post('/processar', 'TefController@processarPagamento');
+    Route::post('/iniciar', 'TefController@iniciarTransacao');
+    Route::post('/confirmar', 'TefController@confirmarTransacao');
+    Route::post('/cancelar', 'TefController@cancelarTransacao');
+    Route::post('/desfazer', 'TefController@desfazerTransacao');
+    Route::get('/status', 'TefController@verificarStatus');
+    Route::post('/imprimir', 'TefController@imprimirComprovante');
+    Route::post('/adm', 'TefController@operacoesAdm');
+});
 
