@@ -45,8 +45,8 @@
 	    			@if($transaction->numero_nfce > 0)
 	    			<a onclick="window.open('/nfce/imprimir/{{$transaction->id}}')" class="print-invoice-link">
 	    				<i class="fa fa-print text-success" aria-hidden="true" title="Imprimir fiscal"></i>
-	    			</a>
-	    			@endif
+	    			</a>'111kmj',*-9+ nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn/
+	    			@endif34
 				</td>
 			</tr>
 		@endforeach

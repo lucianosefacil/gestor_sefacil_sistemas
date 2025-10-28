@@ -17,6 +17,7 @@ use App\Models\Product;
 use App\Models\PurchaseLine;
 use App\Restaurant\ResTable;
 use App\Models\TaxRate;
+use App\Models\TefTransaction;
 use App\Models\Transaction;
 use App\Models\TransactionPayment;
 use App\Models\TransactionSellLine;
@@ -733,31 +734,32 @@ class TransactionUtil extends Util
 
                         $payment_data = [
                             'amount' => $payment_amount,
-                            'method' => $payment['method'],
+                            'method' => $payment['method'] ?? null,
                             'business_id' => $transaction->business_id,
                             'is_return' => isset($payment['is_return']) ? $payment['is_return'] : 0,
-                            'card_transaction_number' => $payment['card_transaction_number'],
-                            'card_number' => $payment['card_number'],
-                            'card_type' => $payment['card_type'],
-                            'card_holder_name' => $payment['card_holder_name'],
-                            'card_month' => $payment['card_month'],
-                            'card_security' => $payment['card_security'],
-                            'cheque_number' => $payment['cheque_number'],
-                            'vencimento' => $payment['vencimento'] == "" ? NULL : $this->parseDate($payment['vencimento']),
-                            'bank_account_number' => $payment['bank_account_number'],
-                            'note' => $payment['note'],
+                            'card_transaction_number' => $payment['card_transaction_number'] ?? null,
+                            'card_number' => $payment['card_number'] ?? null,
+                            'card_type' => $payment['card_type'] ?? null,
+                            'card_holder_name' => $payment['card_holder_name'] ?? null,
+                            'card_month' => $payment['card_month'] ?? null,
+                            'card_security' => $payment['card_security'] ?? null,
+                            'cheque_number' => $payment['cheque_number'] ?? null,
+                            'vencimento' => ($payment['vencimento'] ?? '') == "" ? NULL : $this->parseDate($payment['vencimento']),
+                            'bank_account_number' => $payment['bank_account_number'] ?? null,
+                            'note' => $payment['note'] ?? null,
                             'paid_on' => !empty($payment['paid_on']) ? $payment['paid_on'] : \Carbon::now()->toDateTimeString(),
                             'created_by' => empty($user_id) ? auth()->user()->id : $user_id,
                             'payment_for' => $transaction->contact_id,
                             'payment_ref_no' => $payment_ref_no,
                             'account_id' => !empty($payment['account_id']) ? $payment['account_id'] : null
                         ];
-                        if ($payment['method'] == 'custom_pay_1') {
-                            $payment_data['transaction_no'] = $payment['transaction_no_1'];
-                        } elseif ($payment['method'] == 'custom_pay_2') {
-                            $payment_data['transaction_no'] = $payment['transaction_no_2'];
-                        } elseif ($payment['method'] == 'custom_pay_3') {
-                            $payment_data['transaction_no'] = $payment['transaction_no_3'];
+                        
+                        if (($payment['method'] ?? '') == 'custom_pay_1') {
+                            $payment_data['transaction_no'] = $payment['transaction_no_1'] ?? null;
+                        } elseif (($payment['method'] ?? '') == 'custom_pay_2') {
+                            $payment_data['transaction_no'] = $payment['transaction_no_2'] ?? null;
+                        } elseif (($payment['method'] ?? '') == 'custom_pay_3') {
+                            $payment_data['transaction_no'] = $payment['transaction_no_3'] ?? null;
                         }
 
                         $payments_formatted[] = new TransactionPayment($payment_data);
@@ -795,13 +797,31 @@ class TransactionUtil extends Util
         }
 
         if (!empty($payments_formatted)) {
-            $transaction->payment_lines()->saveMany($payments_formatted);
+            $saved_payments = $transaction->payment_lines()->saveMany($payments_formatted);
 
             foreach ($transaction->payment_lines as $key => $value) {
                 if (!empty($account_transactions[$key])) {
                     event(new TransactionPaymentAdded($value, $account_transactions[$key]));
                     $payment_type = !empty($value->transaction->type) ? $value->transaction->type : null;
                     AccountTransaction::updateAccountTransaction($value, $payment_type);
+                }
+            }
+            
+            // Salvar dados TEF na tabela tef_transactions se existirem
+            // Buscar os pagamentos recém-criados para associar com os dados TEF
+            $recentPayments = $transaction->payment_lines()
+                ->orderBy('id', 'desc')
+                ->limit(count($payments_formatted))
+                ->get()
+                ->reverse()
+                ->values();
+            
+            foreach ($payments as $index => $payment) {
+                if (isset($payment['tef_processado']) && $payment['tef_processado'] == '1') {
+                    // Buscar o pagamento correspondente pelo índice
+                    $paymentObject = $recentPayments->get($index);
+                    
+                    $this->saveTefTransactionData($transaction, $paymentObject, $payment);
                 }
             }
         }
@@ -4667,5 +4687,74 @@ class TransactionUtil extends Util
             'total_sales' => $totals->total_sales,
             'total_sales_without_tax' => $totals->total_sales_without_tax
         ];
+    }
+
+    /**
+     * Salva dados de transação TEF
+     *
+     * @param object $transaction
+     * @param object $transactionPayment
+     * @param array $paymentData
+     *
+     * @return void
+     */
+    private function saveTefTransactionData($transaction, $transactionPayment, $paymentData)
+    {
+        $tefData = [
+            'transaction_id' => $transaction->id,
+            'cash_register_transaction_id' => null,
+            'tef_status' => $paymentData['tef_status'] ?? 'aprovado',
+            'tef_nsu' => $paymentData['tef_nsu'] ?? null,
+            'tef_codigo_autorizacao' => $paymentData['tef_codigo_autorizacao'] ?? null,
+            'tef_adquirente' => $paymentData['tef_adquirente'] ?? null,
+            'tef_comando' => $paymentData['tef_comando'] ?? null,
+            'tef_id_req' => $paymentData['tef_id_req'] ?? null,
+            'tef_valor' => $paymentData['tef_valor'] ?? $paymentData['amount'] ?? null,
+            'tef_parcelas' => $paymentData['tef_parcelas'] ?? 1,
+            'tef_tipo_transacao' => $paymentData['tef_tipo_transacao'] ?? null,
+            'tef_data_hora' => !empty($paymentData['tef_data_hora']) ? date('Y-m-d H:i:s', strtotime($paymentData['tef_data_hora'])) : now(),
+            'tef_processado' => true,
+        ];
+
+        TefTransaction::create($tefData);
+        
+        // Atualizar a forma de pagamento baseada no tipo de transação TEF
+        // Só atualiza se o método atual for 'tef' (genérico) ou estiver vazio
+        if ($transactionPayment && !empty($tefData['tef_tipo_transacao'])) {
+            $currentMethod = $transactionPayment->method;
+            
+            // Só atualiza se o método for 'tef' ou null/vazio
+            if (empty($currentMethod) || $currentMethod == 'tef') {
+                $paymentMethod = $this->mapTefTipoToPaymentMethod($tefData['tef_tipo_transacao']);
+                
+                $transactionPayment->method = $paymentMethod;
+                $transactionPayment->save();
+            }
+        }
+    }
+
+    /**
+     * Mapeia tipo de transação TEF para forma de pagamento do sistema
+     *
+     * @param string $tefTipoTransacao
+     * @return string
+     */
+    private function mapTefTipoToPaymentMethod($tefTipoTransacao)
+    {
+        $mapping = [
+            '10' => 'card',     // Débito - Cartão de Débito
+            '20' => 'debit',      // Crédito à vista
+            '21' => 'card',      // Crédito parcelado emissor (loja)
+            '22' => 'card',      // Crédito parcelado estabelecimento (ADM)
+            '30' => 'card',      // Pré-datado
+            '40' => 'card',      // Voucher (alimentação, refeição)
+            '50' => 'card',      // Private Label (cartão da loja)
+            '60' => 'card',      // Frota
+            '70' => 'other',     // Saque
+            '80' => 'other',     // Depósito
+            '90' => 'pix',       // PIX (se aplicável)
+        ];
+
+        return $mapping[$tefTipoTransacao] ?? 'card';
     }
 }

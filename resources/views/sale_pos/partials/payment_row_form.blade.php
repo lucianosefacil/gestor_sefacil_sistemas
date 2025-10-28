@@ -76,4 +76,33 @@
 			{!! Form::textarea("payment[$row_index][note]", $payment_line['note'], ['class' => 'form-control', 'rows' => 3, 'id' => "note_$row_index"]); !!}
 		</div>
 	</div>
+	
+	<!-- TEF Integration Section -->
+	@if(!empty($business) && $business->enable_tef_pdv == 1)
+	<div class="col-md-12 tef-section" style="display: none;">
+		<div class="box box-info">
+			<div class="box-header with-border">
+				<h3 class="box-title"><i class="fa fa-credit-card"></i> TEF - Transferência Eletrônica de Fundos</h3>
+				<small>A forma de pagamento será selecionada no terminal GETPAY</small>
+			</div>
+			<div class="box-body">
+				<div class="row">
+					<div class="col-md-12">
+						<button type="button" class="btn btn-primary btn-processar-tef" data-row="{{$row_index}}">
+							<i class="fa fa-credit-card"></i> Processar TEF
+						</button>
+						<button type="button" class="btn btn-info btn-tef-adm" data-row="{{$row_index}}">
+							<i class="fa fa-cog"></i> Operações ADM
+						</button>
+					</div>
+				</div>
+				<div class="tef-status mt-3" style="display: none;">
+					<div class="alert alert-info">
+						<i class="fa fa-spinner fa-spin"></i> Processando TEF...
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	@endif
 </div>

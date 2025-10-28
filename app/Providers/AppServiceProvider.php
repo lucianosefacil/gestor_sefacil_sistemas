@@ -3,6 +3,8 @@
 namespace App\Providers;
 use App\Models\System;
 use App\Models\Business;
+use App\Models\TransactionPayment;
+use App\Observers\TransactionPaymentObserver;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Blade;
@@ -29,6 +31,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot()
     {
+        // Registrar Observer para TransactionPayment
+        TransactionPayment::observe(TransactionPaymentObserver::class);
+        \Log::info('🚀 AppServiceProvider: TransactionPaymentObserver REGISTRADO');
+        
         if (request()->has('lang')) {
             \App::setLocale(request()->get('lang'));
         }else{
@@ -64,7 +70,11 @@ class AppServiceProvider extends ServiceProvider
                 }
 
                 $business_id = session('user.business_id');
-                $casas_decimais = Business::where('id', $business_id)->value('casas_decimais_valor');
+                $casas_decimais = 2; // Default value
+                
+                if (!empty($business_id)) {
+                    $casas_decimais = Business::where('id', $business_id)->value('casas_decimais_valor') ?? 2;
+                }
 
                 $view->with('enabled_modules', $enabled_modules);
                 $view->with('__is_pusher_enabled', $__is_pusher_enabled);

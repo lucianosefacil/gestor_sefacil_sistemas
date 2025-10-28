@@ -595,11 +595,12 @@ class BusinessController extends Controller
                 'cidade_id', 'rua', 'numero', 'bairro', 'cep', 'telefone', 'ultimo_numero_nfe', 'ultimo_numero_nfce',
                 'ultimo_numero_cte', 'ultimo_numero_mdfe', 'inscricao_municipal', 'numero_serie_nfe', 'numero_serie_nfce', 'ambiente', 'regime', 'cst_csosn_padrao', 'cst_pis_padrao',
                 'cst_cofins_padrao', 'cst_ipi_padrao', 'csc', 'csc_id', 'perc_icms_padrao', 'perc_pis_padrao', 'perc_cofins_padrao', 'perc_ipi_padrao', 'ncm_padrao', 'cfop_saida_estadual_padrao', 'cfop_saida_inter_estadual_padrao', 'aut_xml', 'casas_decimais_valor', 'numero_serie_cte', 'numero_serie_mdfe', 'pCredSN',
-                'modelo_pdv'
+                'modelo_pdv', 'enable_tef_pdv'
             ]);
 
             $certificado = $request->file('certificado');
             $business_details['pCredSN'] = $business_details['pCredSN'] ?? 0;
+            $business_details['enable_tef_pdv'] = $request->has('enable_tef_pdv') ? 1 : 0;
 
             if ($certificado) {
 
