@@ -604,6 +604,7 @@ $(document).ready(function () {
             }
         }
 
+        console.log('🟡 SHOWING PAYMENT MODAL');
         $('#modal_payment').modal('show');
     });
 
@@ -624,6 +625,7 @@ $(document).ready(function () {
                 }
             }
 
+            console.log('🟡 SHOWING PAYMENT MODAL (pedido-finalize)');
             $('#modal_payment').modal('show');
         }
     });
@@ -637,6 +639,27 @@ $(document).ready(function () {
         if ($('form#edit_pos_sell_form').length == 0) {
             $(this).find('#method_0').change();
         }
+    });
+
+    // DEBUG: Add breakpoints and logs for modal close debugging
+    console.log('=== MODAL DEBUGGING SETUP ===');
+    
+    // Listener for close button (X) clicks
+    $('#modal_payment').on('click', '.close', function() {
+        console.log('🔴 CLOSE BUTTON (X) CLICKED');
+    });
+    
+    // Listener for "Close" button clicks  
+    $('#modal_payment').on('click', '[data-dismiss="modal"]', function() {
+        console.log('🔴 CLOSE BUTTON CLICKED:', $(this).text());
+    });
+    
+    // Re-enable buttons when payment modal is closed without completing transaction
+    $('#modal_payment').on('hidden.bs.modal', function () {
+        console.log('🔴 MODAL HIDDEN EVENT TRIGGERED');
+        console.log('🔄 Calling enable_pos_form_actions()...');
+        enable_pos_form_actions();
+        console.log('✅ enable_pos_form_actions() completed');
     });
 
     //Finalize without showing payment options
@@ -892,8 +915,33 @@ $(document).ready(function () {
         });
     });
 
+    // Toggle TEF section visibility
+    $(document).on('click', '.btn-toggle-tef', function () {
+        var payment_row = $(this).closest('.payment_row');
+        var tef_section = payment_row.find('.tef-section');
+        var btn = $(this);
+        
+        if (tef_section.is(':visible')) {
+            tef_section.hide();
+            btn.html('<i class="fa fa-credit-card"></i> Usar TEF');
+            btn.removeClass('btn-success').addClass('btn-info');
+        } else {
+            tef_section.show();
+            btn.html('<i class="fa fa-eye-slash"></i> Ocultar TEF');
+            btn.removeClass('btn-info').addClass('btn-success');
+        }
+    });
+
     pos_form_validator = pos_form_obj.validate({
         submitHandler: function (form) {
+            console.log('📝 INICIO DO SUBMIT HANDLER');
+            console.log('📝 Form recebido tipo:', typeof form);
+            console.log('📝 Form é elemento HTML?', form instanceof HTMLElement);
+            
+            // Captura referência do formulário para usar nos callbacks assíncronos
+            const formRef = form;
+            console.log('📝 FORM REF CRIADO - tipo:', typeof formRef);
+            console.log('📝 FORM REF é elemento HTML?', formRef instanceof HTMLElement);
             // var total_payble = __read_number($('input#final_total_input'));
             // var total_paying = __read_number($('input#total_paying_input'));
             var cnf = true;
@@ -914,7 +962,7 @@ $(document).ready(function () {
 
             let suspend = $('input#is_suspend').val()
             if (suspend == 1) {
-                salvar(form)
+                salvar(formRef)
             } else {
                 if (cnf) {
                     swal({
@@ -922,7 +970,9 @@ $(document).ready(function () {
                         icon: 'success',
                         buttons: ["Somente finalizar", "Sim"],
                     }).then(sim => {
+                        console.log('🔍 Opção escolhida no swal:', sim);
                         if (sim) {
+                            console.log('📄 Usuário escolheu "Sim" - vai emitir NFCe');
                             $('#modal_payment').modal('hide')
                             emitirNFce = true;
                             swal({
@@ -941,14 +991,19 @@ $(document).ready(function () {
                                 // pos_form_obj.submit();
                                 // swal.stopLoading();
                                 // swal.close();
-                                salvar(form)
+                                salvar(formRef)
 
 
                             });
 
                         } else {
-                            console.log("somente finalizar")
-                            salvar(form)
+                            console.log("🔥 Usuário escolheu 'Somente finalizar' - VERSÃO NOVA COM TIMESTAMP:", new Date().getTime())
+                            console.log("somente finalizar - EXECUTANDO SALVAR AGORA!")
+                            console.log('🎯 CHAMANDO SALVAR() - formRef:', typeof formRef, formRef);
+                            console.log('🎯 FormRef é válido?', !!formRef);
+
+                            salvar(formRef);
+                            console.log('🟦 APÓS TRY-CATCH');
                         }
                     });
 
@@ -960,10 +1015,24 @@ $(document).ready(function () {
     });
 
     function salvar(form) {
+        console.log('🚀 FUNÇÃO SALVAR() INICIADA');
+        console.log('🚀 Form recebido na salvar:', typeof form, !!form);
+
+        console.log('🚀 INICIANDO SALVAMENTO DA VENDA');
+        console.log('🚀 Form action URL:', $(form).attr('action'));
         disable_pos_form_actions();
         var data = $(form).serialize();
         data = data + '&status=final';
         var url = $(form).attr('action');
+        console.log('🚀 Enviando dados:', data.substring(0, 200) + '...');
+
+        // Ensure payment_method is included in the data
+        var paymentMethod = $('#payment_method').val(); // Adjust selector as needed
+        if (paymentMethod) {
+            data = data + '&payment_method=' + encodeURIComponent(paymentMethod);
+        }
+
+        console.log('🚀 Dados com payment_method:', data.substring(0, 200) + '...');
         $.ajax({
             method: 'POST',
             url: url,
@@ -1058,22 +1127,45 @@ $(document).ready(function () {
                         } else {
                             let suspend = $('input#is_suspend').val()
                             if (suspend == 1) {
+                                console.log('🎯 VENDA SUSPENSA - Chamando reset_pos_form()');
                                 toastr.success("Venda suspensa!");
                                 reset_pos_form()
 
                             } else {
                                 console.log("else")
-                                toastr.success(result.msg);
-                                if (result.venda_id) {
-                                    window.open(path + '/nfce/imprimirNaoFiscal/' + result.venda_id)
+                                
+                                // Verifica se está em ambiente de homologação (2 = homologação)
+                                let ambiente = $('#business_ambiente').val();
+                                let isHomologacao = ambiente == '2';
+                                
+                                if (isHomologacao) {
+                                    // Em homologação: comportamento IGUAL ao NFCe (finaliza e reseta automaticamente)
+                                    console.log("🧪 Ambiente de homologação: simulando comportamento NFCe");
+                                    toastr.success(result.msg);
+                                    if (result.venda_id) {
+                                        window.open(path + '/nfce/imprimirNaoFiscal/' + result.venda_id)
+                                    } else {
+                                        let uri = window.location.href
+                                        let id = uri.split("/")[4];
+                                        window.open(path + '/nfce/imprimirNaoFiscal/' + id)
+                                    }
+                                    // Reset automático igual ao NFCe
+                                    console.log('🎯 HOMOLOGAÇÃO - Chamando reset_pos_form()');
+                                    reset_pos_form();
                                 } else {
-                                    let uri = window.location.href
-                                    let id = uri.split("/")[4];
-                                    window.open(path + '/nfce/imprimirNaoFiscal/' + id)
-
+                                    // Em produção: comportamento normal (reset imediato)
+                                    console.log("🏭 Ambiente de produção: finalizando venda");
+                                    toastr.success(result.msg);
+                                    if (result.venda_id) {
+                                        window.open(path + '/nfce/imprimirNaoFiscal/' + result.venda_id)
+                                    } else {
+                                        let uri = window.location.href
+                                        let id = uri.split("/")[4];
+                                        window.open(path + '/nfce/imprimirNaoFiscal/' + id)
+                                    }
+                                    console.log('🎯 VENDA FINALIZADA COM SUCESSO - Chamando reset_pos_form()');
+                                    reset_pos_form();
                                 }
-                                reset_pos_form()
-
                             }
 
                         }
@@ -1083,9 +1175,20 @@ $(document).ready(function () {
                     toastr.error(result.msg);
                 }
 
-                enable_pos_form_actions();
+                // Verifica se está em homologação para não duplicar o enable_pos_form_actions
+                let ambiente = $('#business_ambiente').val();
+                let isHomologacao = ambiente == '2';
+                
+                if (!isHomologacao) {
+                    // Em produção: habilita normalmente
+                    enable_pos_form_actions();
+                }
+                // Em homologação: o enable_pos_form_actions já foi chamado após o reset
             }, error: function (error) {
-                console.log(error)
+                console.log('❌ ERRO NA REQUISIÇÃO DE VENDA:', error);
+                console.log('❌ Status:', error.status);
+                console.log('❌ Resposta:', error.responseText);
+                enable_pos_form_actions(); // Reabilita botões em caso de erro
             }
         });
     }
@@ -2100,6 +2203,8 @@ function isValidPosForm() {
 }
 
 function reset_pos_form() {
+    console.log('🔄 RESET_POS_FORM CALLED');
+
 
     //If on edit page then redirect to Add POS page
     if ($('form#edit_pos_sell_form').length > 0) {
@@ -2118,7 +2223,15 @@ function reset_pos_form() {
     set_default_customer();
     set_location();
 
+    console.log('🔍 Produtos antes da remoção (tr.product_row):', $('tr.product_row').length);
+    console.log('🔍 Produtos antes da remoção (table#pos_table .product_row):', $('table#pos_table tbody .product_row').length);
+    console.log('🔍 Todas as linhas da tabela:', $('table#pos_table tbody tr').length);
     $('tr.product_row').remove();
+    $('table#pos_table tbody .product_row').remove(); // Tentativa alternativa
+    console.log('🔍 Produtos após remoção:', $('tr.product_row').length);
+    console.log('🔍 Linhas restantes na tabela:', $('table#pos_table tbody tr').length);
+    
+    console.log('🔄 Zerando totais...');
     $('span.total_quantity, span.price_total, span#total_discount, span#order_tax, span#total_payable, span#shipping_charges_amount').text(0);
     $('span.total_payable_span', 'span.total_paying', 'span.balance_due').text(0);
 
@@ -2157,6 +2270,11 @@ function reset_pos_form() {
 
     $('input#is_suspend').val(0)
     $(document).trigger('sell_form_reset');
+    
+    // Sempre reabilitar botões após reset
+    console.log('🔄 reset_pos_form(): Reabilitando botões...');
+    enable_pos_form_actions();
+    console.log('✅ reset_pos_form(): Formulário resetado e botões reabilitados');
 }
 
 function set_default_customer() {
@@ -2567,12 +2685,30 @@ $(document).on('change', '.payment_types_dropdown', function (e) {
             .data('default_payment_accounts') : $('#location_id').data('default_accounts');
 
     var payment_type = $(this).val();
+    var payment_row = $(this).closest('.payment_row');
+    var row_index = payment_row.find('.payment_row_index').val();
+
+    // Controlar exibição da seção TEF baseado na forma de pagamento selecionada
+    var tef_section = payment_row.find('.tef-section');
+    
+    if (payment_type === 'tef') {
+        console.log('🟢 TEF selecionado - mostrando seção TEF');
+        tef_section.show();
+        
+        // Se existe integração TEF disponível, habilitar funcionalidades
+        if (window.tefIntegration) {
+            console.log('✅ Integração TEF disponível');
+        } else {
+            console.log('⚠️ Integração TEF não disponível');
+        }
+    } else {
+        console.log('🔘 Método não-TEF selecionado - ocultando seção TEF');
+        tef_section.hide();
+    }
 
     if (payment_type) {
         var default_account = default_accounts && default_accounts[payment_type]['account'] ?
             default_accounts[payment_type]['account'] : '';
-        var payment_row = $(this).closest('.payment_row');
-        var row_index = payment_row.find('.payment_row_index').val();
 
         var account_dropdown = payment_row.find('select#account_' + row_index);
         if (account_dropdown.length && default_accounts) {
@@ -2600,15 +2736,35 @@ $(document).on('shown.bs.tab', 'a[href="#tab_sangria_suprimento"]', function () 
 });
 
 function disable_pos_form_actions() {
+    console.log('🔴 DISABLE_POS_FORM_ACTIONS CALLED');
+
+    
+    console.log('🔄 Showing pos-processing div...');
     $('div.pos-processing').show();
+    
+    console.log('🔄 Disabling #pos-save button...');
     $('#pos-save').attr('disabled', 'true');
+    
+    console.log('🔄 Disabling all buttons in pos-form-actions...');
     $('div.pos-form-actions').find('button').attr('disabled', 'true');
+    
+    console.log('❌ ALL BUTTONS DISABLED');
 }
 
 function enable_pos_form_actions() {
+    console.log('🟢 ENABLE_POS_FORM_ACTIONS CALLED');
+
+    
+    console.log('🔄 Hiding pos-processing div...');
     $('div.pos-processing').hide();
+    
+    console.log('🔄 Enabling #pos-save button...');
     $('#pos-save').removeAttr('disabled');
+    
+    console.log('🔄 Enabling all buttons in pos-form-actions...');
     $('div.pos-form-actions').find('button').removeAttr('disabled');
+    
+    console.log('✅ ALL BUTTONS ENABLED');
 }
 
 $(document).on('change', '#recur_interval_type', function () {

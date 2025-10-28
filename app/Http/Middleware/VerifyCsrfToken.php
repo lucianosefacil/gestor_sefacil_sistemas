@@ -12,6 +12,15 @@ class VerifyCsrfToken extends Middleware
      * @var array
      */
     protected $except = [
-        //
+        'tef/processar',
+        'tef/processar-mock',
+        'tef/iniciar',
+        'tef/confirmar',
+        'tef/cancelar',
+        'tef/status',
+        'tef/adm',
+        'tef/imprimir',
+        'tef/desfazer',
+        'tef/test-post',
     ];
 }
