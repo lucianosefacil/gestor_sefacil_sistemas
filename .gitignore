@@ -43,10 +43,11 @@ awstats/
 /composer.lock
 /storage/*
 !/storage/app/
-!/storage/framework/
+/storage/framework/
 !/storage/logs/
 !/storage/app/.empty
 !/storage/framework/.empty
 !/storage/logs/.empty
 /storage/framework/sessions/*
+/storage
 
