@@ -24,7 +24,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Yajra\DataTables\Facades\DataTables;
 use App\Models\Pais;
-use Illuminate\Support\Facades\Hash;  
+use Illuminate\Support\Facades\Hash;
 
 class PurchaseController extends Controller
 {
@@ -247,7 +247,7 @@ class PurchaseController extends Controller
                         }
                     }
                 ])
-                ->rawColumns(['final_total', 'action', 'payment_due', 'payment_status', 'status', 'fiscal'])
+                ->rawColumns(['final_total', 'action', 'payment_due', 'payment_status', 'status', 'ref_no', 'fiscal'])
                 ->make(true);
         }
 
