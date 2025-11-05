@@ -1,0 +1,1 @@
+Erro de comunicação via soap,  SSL certificate problem: unable to get local issuer certificate [https://nfe.sefaz.go.gov.br/nfe/services/NFeAutorizacao4]

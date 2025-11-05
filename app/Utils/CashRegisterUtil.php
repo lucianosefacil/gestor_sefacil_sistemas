@@ -21,9 +21,15 @@ class CashRegisterUtil extends Util
     {
         $user_id = auth()->user()->id;
         $count = CashRegister::where('user_id', $user_id)
+<<<<<<< HEAD
         ->where('status', 'open')
         ->count();
-        return true;
+=======
+            ->where('status', 'open')
+            ->count();
+    
+>>>>>>> 2a27942e30b693deaee5cc3077cd8eee7b8311c5
+        return $count;
     }
 
     /**

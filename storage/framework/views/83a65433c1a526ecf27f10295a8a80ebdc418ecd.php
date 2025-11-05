@@ -351,6 +351,20 @@
                 </div>
             </div>
         </div>
+
+        <div class="col-sm-4">
+            <div class="form-group">
+                <div class="checkbox">
+                    <br>
+                    <label>
+                        <?php echo Form::checkbox('enable_tef_pdv', 1, $business->enable_tef_pdv, 
+                        [ 'class' => 'input-icheck']); ?> 
+                        <i class="fa fa-credit-card"></i> Habilitar TEF no PDV
+                    </label>
+                    <small class="text-muted">Quando habilitado, TEF aparecerá nas formas de pagamento</small>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="row">

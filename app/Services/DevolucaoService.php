@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Services;
+
 use NFePHP\NFe\Make;
 use NFePHP\NFe\Tools;
 use NFePHP\Common\Certificate;
@@ -12,16 +13,20 @@ use NFePHP\NFe\Complements;
 use NFePHP\DA\NFe\Danfe;
 use NFePHP\DA\Legacy\FilesFolders;
 use NFePHP\Common\Soap\SoapCurl;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 error_reporting(E_ALL);
 ini_set('display_errors', 'On');
 
-class DevolucaoService{
+class DevolucaoService
+{
 
-	private $config; 
+	private $config;
 	private $tools;
 
-	public function __construct($config, $certificado){
+	public function __construct($config, $certificado)
+	{
 		// $config = Business::getConfig($business_id, $devolucao);
 		$this->config = $config;
 		$this->tools = new Tools(json_encode($config), Certificate::readPfx($certificado->certificado, base64_decode($certificado->senha_certificado)));
@@ -32,24 +37,25 @@ class DevolucaoService{
 		$this->tools->model('55');
 	}
 
-	public function gerarDevolucao($devolucao){
+	public function gerarDevolucao($devolucao)
+	{
 		date_default_timezone_set('America/Belem');
 		$business_id = request()->session()->get('user.business_id');
 		$config = Business::getConfig($business_id, $devolucao);
 
 		$nfe = new Make();
 		$stdInNFe = new \stdClass();
-		$stdInNFe->versao = '4.00'; 
-		$stdInNFe->Id = null; 
-		$stdInNFe->pk_nItem = ''; 
+		$stdInNFe->versao = '4.00';
+		$stdInNFe->Id = null;
+		$stdInNFe->pk_nItem = '';
 
 		$infNFe = $nfe->taginfNFe($stdInNFe);
 
 		$lastNumero = $devolucao->lastNFe();
-		
+
 		$stdIde = new \stdClass();
 		$stdIde->cUF = $config->getcUF($config->cidade->uf);
-		$stdIde->cNF = rand(11111,99999);
+		$stdIde->cNF = rand(11111, 99999);
 		// $stdIde->natOp = $venda->natureza->natureza;
 		$stdIde->natOp = $this->retiraAcentos($devolucao->natureza->natureza);
 
@@ -57,7 +63,7 @@ class DevolucaoService{
 
 		$stdIde->mod = 55;
 		$stdIde->serie = $config->numero_serie_nfe;
-		$stdIde->nNF = (int)$lastNumero+1;
+		$stdIde->nNF = (int)$lastNumero + 1;
 		$stdIde->dhEmi = date("Y-m-d\TH:i:sP");
 		$stdIde->dhSaiEnt = date("Y-m-d\TH:i:sP");
 		// $stdIde->tpNF = 1;
@@ -70,12 +76,12 @@ class DevolucaoService{
 		$stdIde->tpEmis = 1;
 		$stdIde->cDV = 0;
 		$stdIde->tpAmb = $config->ambiente;
-		$stdIde->finNFe = $devolucao->natureza->finNFe; 
+		$stdIde->finNFe = $devolucao->natureza->finNFe;
 		$stdIde->indFinal = $devolucao->contact->consumidor_final;
 		$stdIde->indPres = 1;
 		// $stdIde->procEmi = '0';
 		// $stdIde->verProc = '2.0';
-		if($config->ambiente == 2){
+		if ($config->ambiente == 2) {
 			$stdIde->indIntermed = 0;
 		}
 		$stdIde->procEmi = '0';
@@ -127,27 +133,25 @@ class DevolucaoService{
 		$stdDest = new \stdClass();
 		$stdDest->xNome = $devolucao->contact->name;
 
-		if($devolucao->contact->contribuinte){
-			if($devolucao->contact->ie_rg == 'ISENTO' || $devolucao->contact->ie_rg == NULL){
+		if ($devolucao->contact->contribuinte) {
+			if ($devolucao->contact->ie_rg == 'ISENTO' || $devolucao->contact->ie_rg == NULL) {
 				$stdDest->indIEDest = "2";
-			}else{
+			} else {
 				$stdDest->indIEDest = "1";
 			}
-
-		}else{
+		} else {
 			$stdDest->indIEDest = "9";
 		}
 
 		$cnpj_cpf = preg_replace('/[^0-9]/', '', $devolucao->contact->cpf_cnpj);
 
-		if(strlen($cnpj_cpf) == 14){
+		if (strlen($cnpj_cpf) == 14) {
 			$stdDest->CNPJ = $cnpj_cpf;
 			$ie = preg_replace('/[^0-9]/', '', $devolucao->contact->ie_rg);
 			$stdDest->IE = $ie;
-		}
-		else{
+		} else {
 			$stdDest->CPF = $cnpj_cpf;
-		} 
+		}
 
 		$dest = $nfe->tagdest($stdDest);
 
@@ -185,7 +189,7 @@ class DevolucaoService{
 		$somaST = 0;
 		$somaAcrescimo = 0;
 		$somaIPI = 0;
-		foreach($devolucao->itens as $i){
+		foreach ($devolucao->itens as $i) {
 			$itemCont++;
 
 			$stdProd = new \stdClass();
@@ -197,22 +201,21 @@ class DevolucaoService{
 			$ncm = $i->ncm;
 			$ncm = str_replace(".", "", $ncm);
 			$stdProd->NCM = $ncm;
-			if($devolucao->tipo == 1){
+			if ($devolucao->tipo == 1) {
 				$stdProd->CFOP = $config->cidade->uf == $devolucao->contact->cidade->uf ?
-				$devolucao->natureza->cfop_saida_estadual : $devolucao->natureza->cfop_saida_inter_estadual;
-
-			}else{
+					$devolucao->natureza->cfop_saida_estadual : $devolucao->natureza->cfop_saida_inter_estadual;
+			} else {
 				// $stdProd->CFOP = $config->UF != $devolucao->fornecedor->cidade->uf ?
 				// $devolucao->natureza->CFOP_entrada_inter_estadual : $devolucao->natureza->CFOP_entrada_estadual;
 
 				$stdProd->CFOP = $config->cidade->uf == $devolucao->contact->cidade->uf ?
-				$devolucao->natureza->cfop_entrada_estadual : $devolucao->natureza->cfop_entrada_inter_estadual;
+					$devolucao->natureza->cfop_entrada_estadual : $devolucao->natureza->cfop_entrada_inter_estadual;
 			}
-			if($i->cst_csosn == '500' || $i->cst_csosn == '60'){
+			if ($i->cst_csosn == '500' || $i->cst_csosn == '60') {
 				$stdProd->cBenef = 'SEM CBENEF';
-			}else{
+			} else {
 				// if ($i->cst_csosn == '40') 
-				$stdProd->cBenef = $i->cBenef; 
+				$stdProd->cBenef = $i->cBenef;
 			}
 			$stdProd->uCom = $i->unidade_medida;
 			$stdProd->qCom = $i->quantidade;
@@ -229,44 +232,44 @@ class DevolucaoService{
 
 			$somaProdutos += ($i->quantidade * $i->valor_unit);
 
-			if($i->vBC > 0 && $devolucao->devolucao_parcial == 0){
+			if ($i->vBC > 0 && $devolucao->devolucao_parcial == 0) {
 				$somaVbc += $i->vBC;
 			}
 
-			if($devolucao->vDesc > 0){
-				$stdProd->vDesc = $this->format($devolucao->vDesc/$totalItens);
+			if ($devolucao->vDesc > 0) {
+				$stdProd->vDesc = $this->format($devolucao->vDesc / $totalItens);
 			}
 
-			if($devolucao->vOutro > 0){
-				if($itemCont < sizeof($devolucao->itens)){
+			if ($devolucao->vOutro > 0) {
+				if ($itemCont < sizeof($devolucao->itens)) {
 					$totalVenda = $devolucao->valor_devolvido;
 
-					$media = (((($stdProd->vProd - $totalVenda)/$totalVenda))*100);
+					$media = (((($stdProd->vProd - $totalVenda) / $totalVenda)) * 100);
 					$media = 100 - ($media * -1);
 
-					$tempAcrescimo = ($devolucao->vOutro * $media)/100;
+					$tempAcrescimo = ($devolucao->vOutro * $media) / 100;
 					$somaAcrescimo += $tempAcrescimo;
-					if($tempAcrescimo > 0.1)
+					if ($tempAcrescimo > 0.1)
 						$stdProd->vOutro = $this->format($tempAcrescimo);
-				}else{
-					if($devolucao->vOutro - $somaAcrescimo > 0.1)
+				} else {
+					if ($devolucao->vOutro - $somaAcrescimo > 0.1)
 						$stdProd->vOutro = $this->format($devolucao->vOutro - $somaAcrescimo);
 				}
 			}
 
-			if($devolucao->vSeguro > 0){
-				if($itemCont < sizeof($devolucao->itens)){
+			if ($devolucao->vSeguro > 0) {
+				if ($itemCont < sizeof($devolucao->itens)) {
 					$totalVenda = $devolucao->valor_devolvido;
 
-					$media = (((($stdProd->vProd - $totalVenda)/$totalVenda))*100);
+					$media = (((($stdProd->vProd - $totalVenda) / $totalVenda)) * 100);
 					$media = 100 - ($media * -1);
 
-					$tempAcrescimo = ($devolucao->vSeguro * $media)/100;
+					$tempAcrescimo = ($devolucao->vSeguro * $media) / 100;
 					$somaAcrescimo += $tempAcrescimo;
-					if($tempAcrescimo > 0.1)
+					if ($tempAcrescimo > 0.1)
 						$stdProd->vSeg = $this->format($tempAcrescimo);
-				}else{
-					if($devolucao->vSeguro - $somaAcrescimo > 0.1)
+				} else {
+					if ($devolucao->vSeguro - $somaAcrescimo > 0.1)
 						$stdProd->vSeg = $this->format($devolucao->vSeguro - $somaAcrescimo);
 				}
 			}
@@ -279,15 +282,15 @@ class DevolucaoService{
 			// }
 
 
-			if($devolucao->vFrete > 0){
-				$somaFrete += $vFt = $devolucao->vFrete/$totalItens;
+			if ($devolucao->vFrete > 0) {
+				$somaFrete += $vFt = $devolucao->vFrete / $totalItens;
 				$stdProd->vFrete = $this->format($vFt);
 				// $somaProdutos += $vFt;
 			}
 
 			$prod = $nfe->tagprod($stdProd);
 
-		//TAG IMPOSTO
+			//TAG IMPOSTO
 
 			$stdImposto = new \stdClass();
 			$stdImposto->item = $itemCont;
@@ -296,20 +299,20 @@ class DevolucaoService{
 
 			// ICMS
 
-			
-			if($regime == 3){ // regime normal
-			// if($i->cst_csosn != 101 || $i->cst_csosn != 102){ // regime normal
+
+			if ($regime == 3) { // regime normal
+				// if($i->cst_csosn != 101 || $i->cst_csosn != 102){ // regime normal
 
 
 				$stdICMS = new \stdClass();
-				$stdICMS->item = $itemCont; 
+				$stdICMS->item = $itemCont;
 				$stdICMS->orig = $i->orig;
 				$stdICMS->CST = $i->cst_csosn;
 
 				$stdICMS->modBC = 0;
-				if($i->pRedBC == 0){
+				if ($i->pRedBC == 0) {
 
-					if($i->cst_csosn == 60){
+					if ($i->cst_csosn == 60) {
 
 						$stdICMS->vBC = $this->format($i->vBC);
 						$stdICMS->pST = $this->format($i->pST);
@@ -317,7 +320,7 @@ class DevolucaoService{
 						$stdICMS->vICMSSubstituto = $this->format($i->vICMSSubstituto);
 						$stdICMS->vICMSSTRet = $this->format($i->vICMSSTRet);
 
-						if(strlen($i->codigo_anp) > 0){
+						if (strlen($i->codigo_anp) > 0) {
 							$stdICMS->vBCSTDest = 0;
 							$stdICMS->vICMSSTDest = 0;
 							$stdICMS->pRedBCEfet = 0;
@@ -328,20 +331,20 @@ class DevolucaoService{
 						// $stdICMS->vBCEfet = $stdProd->vProd;
 						// $stdICMS->pICMSEfet = 17;
 						// $stdICMS->vICMSEfet = 4088.50;
-					}else{
-						
+					} else {
+
 						$stdICMS->vBC = $this->format($i->vBC);
-						if($i->cst_csosn == 40 || $i->cst_csosn == 41){
+						if ($i->cst_csosn == 40 || $i->cst_csosn == 41) {
 							$stdICMS->vBCSTRet = 0;
 							$stdICMS->vICMSSTRet = $this->format($i->vICMSSTRet);
 							// $stdICMS->vBCSTDest = 0;
 							// $stdICMS->vICMSSTDest = 0;
-						}else{
+						} else {
 							$VBC += $stdICMS->vBC;
-						} 
+						}
 					}
 
-					if($config->UF != $devolucao->contact->cidade->uf){
+					if ($config->UF != $devolucao->contact->cidade->uf) {
 						$stdICMS->pST = $this->format($i->pST);
 						$stdICMS->vBCSTRet = 0;
 						$stdICMS->vICMSSubstituto = $this->format($i->vICMSSubstituto);
@@ -352,50 +355,46 @@ class DevolucaoService{
 					}
 
 					$stdICMS->pICMS = $this->format($i->perc_icms);
-					$stdICMS->vICMS = $stdICMS->vBC * ($stdICMS->pICMS/100);
+					$stdICMS->vICMS = $stdICMS->vBC * ($stdICMS->pICMS / 100);
 					$stdICMS->pRedBC = $this->format($i->pRedBC);
 
-					if($i->modBCST > 0){
+					if ($i->modBCST > 0) {
 						$stdICMS->modBCST = (int)$i->modBCST;
 					}
-					if($i->vBCST > 0){
+					if ($i->vBCST > 0) {
 						$stdICMS->vBCST = $i->vBCST;
 					}
-					if($i->pICMSST > 0){
+					if ($i->pICMSST > 0) {
 						$stdICMS->pICMSST = $i->pICMSST;
 					}
-					if($i->vICMSST > 0){
+					if ($i->vICMSST > 0) {
 						$somaST += $stdICMS->vICMSST = $i->vICMSST;
 					}
-					if($i->pMVAST > 0){
+					if ($i->pMVAST > 0) {
 						$stdICMS->pMVAST = $i->pMVAST;
 					}
 
-					if($stdICMS->CST == 41 && $i->vBCSTRet > 0 || strlen($i->codigo_anp) > 0){
+					if ($stdICMS->CST == 41 && $i->vBCSTRet > 0 || strlen($i->codigo_anp) > 0) {
 						$ICMS = $nfe->tagICMSST($stdICMS);
-					}else{
+					} else {
 						$ICMS = $nfe->tagICMS($stdICMS);
 					}
+				} else {
 
-					
-				}else{
-
-					$tempB = 100-$i->pRedBC;
-					$VBC += $stdICMS->vBC = (($stdProd->vProd-$stdProd->vDesc) * ($tempB/100));
+					$tempB = 100 - $i->pRedBC;
+					$VBC += $stdICMS->vBC = (($stdProd->vProd - $stdProd->vDesc) * ($tempB / 100));
 					$stdICMS->pICMS = $this->format($i->perc_icms);
-					$stdICMS->vICMS = (($stdProd->vProd-$stdProd->vDesc) * ($tempB/100)) * ($stdICMS->pICMS/100);
+					$stdICMS->vICMS = (($stdProd->vProd - $stdProd->vDesc) * ($tempB / 100)) * ($stdICMS->pICMS / 100);
 					$stdICMS->pRedBC = $this->format($i->pRedBC);
 					$ICMS = $nfe->tagICMS($stdICMS);
 				}
 
 				// $somaICMS += 0;
 				// $ICMS = $nfe->tagICMS($stdICMS);
-				if($i->cst_csosn != 40){
+				if ($i->cst_csosn != 40) {
 					$somaICMS += $this->format($stdICMS->vICMS);
 				}
-
-
-			}else{ // regime simples
+			} else { // regime simples
 
 				// $stdICMS = new \stdClass();
 
@@ -430,28 +429,28 @@ class DevolucaoService{
 
 
 
-			$stdPIS = new \stdClass();//PIS
-			$stdPIS->item = $itemCont; 
+			$stdPIS = new \stdClass(); //PIS
+			$stdPIS->item = $itemCont;
 			$stdPIS->CST = $i->cst_pis;
 			$stdPIS->vBC = $i->perc_pis > 0 ? $i->vbcPis : 0.00;
 
 			$stdPIS->pPIS = $this->format($i->perc_pis);
-			$stdPIS->vPIS = $this->format($stdPIS->vBC * ($i->perc_pis/100));;
+			$stdPIS->vPIS = $this->format($stdPIS->vBC * ($i->perc_pis / 100));;
 			// $stdPIS->qBCProd = 0.00;
 			$PIS = $nfe->tagPIS($stdPIS);
 
-			
-			$stdCOFINS = new \stdClass();//COFINS
-			$stdCOFINS->item = $itemCont; 
+
+			$stdCOFINS = new \stdClass(); //COFINS
+			$stdCOFINS->item = $itemCont;
 			$stdCOFINS->CST = $i->cst_cofins;
 			$stdCOFINS->vBC = $i->perc_cofins > 0 ? $i->vbcCofins : 0.00;
 			$stdCOFINS->pCOFINS = $this->format($i->perc_cofins);
-			$stdCOFINS->vCOFINS = $this->format($stdCOFINS->vBC * ($i->perc_cofins/100));
+			$stdCOFINS->vCOFINS = $this->format($stdCOFINS->vBC * ($i->perc_cofins / 100));
 			$COFINS = $nfe->tagCOFINS($stdCOFINS);
 
 
-			$std = new \stdClass();//IPI
-			$std->item = $itemCont; 
+			$std = new \stdClass(); //IPI
+			$std->item = $itemCont;
 			$std->clEnq = null;
 			$std->CNPJProd = null;
 			$std->cSelo = null;
@@ -460,7 +459,7 @@ class DevolucaoService{
 			$std->CST = $i->cst_ipi;
 			$std->vBC = $i->vbcIpi;
 			$std->pIPI = $this->format($i->perc_ipi);
-			$somaIPI += $std->vIPI = $this->format($std->vBC * ($i->perc_ipi/100));
+			$somaIPI += $std->vIPI = $this->format($std->vBC * ($i->perc_ipi / 100));
 			$std->qUnid = null;
 			$std->vUnid = null;
 
@@ -471,22 +470,22 @@ class DevolucaoService{
 			// $std->CEST = '';
 			// $nfe->tagCEST($std);
 
-			if(strlen($i->codigo_anp) > 0){
+			if (strlen($i->codigo_anp) > 0) {
 
 				$stdComb = new \stdClass();
-				$stdComb->item = $itemCont; 
+				$stdComb->item = $itemCont;
 				$stdComb->cProdANP = $i->codigo_anp;
-				$stdComb->descANP = $i->descricao_anp; 
+				$stdComb->descANP = $i->descricao_anp;
 
-				if($i->perc_glp > 0){
+				if ($i->perc_glp > 0) {
 					$stdComb->pGLP = $this->format($i->perc_glp);
 				}
 
-				if($i->perc_gnn > 0){
+				if ($i->perc_gnn > 0) {
 					$stdComb->pGNn = $this->format($i->perc_gnn);
 				}
 
-				if($i->perc_gni > 0){
+				if ($i->perc_gni > 0) {
 					$stdComb->pGNi = $this->format($i->perc_gni);
 				}
 
@@ -519,7 +518,7 @@ class DevolucaoService{
 		$stdICMSTot->vCOFINS = 0.00;
 		$stdICMSTot->vOutro = $this->format($devolucao->vOutro);
 
-		
+
 		$stdICMSTot->vNF = $this->format(($devolucao->valor_devolvido + $devolucao->vFrete + $somaIPI + $devolucao->vSeguro + $devolucao->vOutro) - $devolucao->vDesc);
 
 		$stdICMSTot->vTotTrib = 0.00;
@@ -539,13 +538,13 @@ class DevolucaoService{
 
 
 		$stdDetPag->tPag = '90';
-		$stdDetPag->vPag = 0.00; 
+		$stdDetPag->vPag = 0.00;
 
 		$stdDetPag->indPag = '0'; // sem pagamento 
 
 		$detPag = $nfe->tagdetPag($stdDetPag);
 
-		if($devolucao->transportadora_nome != ""){
+		if ($devolucao->transportadora_nome != "") {
 
 			$std = new \stdClass();
 
@@ -561,14 +560,14 @@ class DevolucaoService{
 			$cnpj_cpf = str_replace("/", "", $cnpj_cpf);
 			$cnpj_cpf = str_replace("-", "", $cnpj_cpf);
 
-			if(strlen($cnpj_cpf) == 14) $std->CNPJ = $cnpj_cpf;
+			if (strlen($cnpj_cpf) == 14) $std->CNPJ = $cnpj_cpf;
 			else $std->CPF = $cnpj_cpf;
 
 			$nfe->tagtransporta($std);
 		}
 
 
-		if($devolucao->veiculo_uf != '' && $devolucao->veiculo_placa != ''){
+		if ($devolucao->veiculo_uf != '' && $devolucao->veiculo_placa != '') {
 			$std = new \stdClass();
 
 			$placa = str_replace("-", "", $devolucao->veiculo_placa);
@@ -578,7 +577,7 @@ class DevolucaoService{
 			$nfe->tagveicTransp($std);
 		}
 
-		if($devolucao->frete_peso_bruto > 0 && $devolucao->frete_peso_liquido > 0){
+		if ($devolucao->frete_peso_bruto > 0 && $devolucao->frete_peso_liquido > 0) {
 			$stdVol = new \stdClass();
 			$stdVol->item = 1;
 			$stdVol->qVol = $devolucao->frete_quantidade;
@@ -598,21 +597,21 @@ class DevolucaoService{
 
 		$std = new \stdClass();
 		$std->CNPJ = getenv('RESP_CNPJ'); //CNPJ da pessoa jurídica responsável pelo sistema utilizado na emissão do documento fiscal eletrônico
-		$std->xContato= getenv('RESP_NOME'); //Nome da pessoa a ser contatada
+		$std->xContato = getenv('RESP_NOME'); //Nome da pessoa a ser contatada
 		$std->email = getenv('RESP_EMAIL'); //E-mail da pessoa jurídica a ser contatada
 		$std->fone = getenv('RESP_FONE'); //Telefone da pessoa jurídica/física a ser contatada
-		
+
 		$nfe->taginfRespTec($std);
 
 		$aut_xml = preg_replace('/[^0-9]/', '', $config->aut_xml);
-		if(strlen($aut_xml) > 10){
+		if (strlen($aut_xml) > 10) {
 
 			$std = new \stdClass();
 			$std->CNPJ = $aut_xml;
 			$nfe->tagautXML($std);
 		}
 
-		try{
+		try {
 
 			$nfe->montaNFe();
 			$arr = [
@@ -621,63 +620,181 @@ class DevolucaoService{
 				'nNf' => $stdIde->nNF
 			];
 			return $arr;
-		}catch(\Exception $e){
+		} catch (\Exception $e) {
 			return [
 				'xml_erros' => $nfe->getErrors()
 			];
 		}
-
 	}
 
-	private function retiraAcentos($texto){
-		return preg_replace(array("/(á|à|ã|â|ä)/","/(Á|À|Ã|Â|Ä)/","/(é|è|ê|ë)/","/(É|È|Ê|Ë)/","/(í|ì|î|ï)/","/(Í|Ì|Î|Ï)/","/(ó|ò|õ|ô|ö)/","/(Ó|Ò|Õ|Ô|Ö)/","/(ú|ù|û|ü)/","/(Ú|Ù|Û|Ü)/","/(ñ)/","/(Ñ)/", "/(ç)/", "/(Ç)/", "/(°)/"),explode(" ","a A e E i I o O u U n N c C o"),$texto);
+	private function retiraAcentos($texto)
+	{
+		return preg_replace(array("/(á|à|ã|â|ä)/", "/(Á|À|Ã|Â|Ä)/", "/(é|è|ê|ë)/", "/(É|È|Ê|Ë)/", "/(í|ì|î|ï)/", "/(Í|Ì|Î|Ï)/", "/(ó|ò|õ|ô|ö)/", "/(Ó|Ò|Õ|Ô|Ö)/", "/(ú|ù|û|ü)/", "/(Ú|Ù|Û|Ü)/", "/(ñ)/", "/(Ñ)/", "/(ç)/", "/(Ç)/", "/(°)/"), explode(" ", "a A e E i I o O u U n N c C o"), $texto);
 	}
 
-	public function sign($xml){
+	public function sign($xml)
+	{
 		return $this->tools->signNFe($xml);
 	}
 
-	public function transmitir($signXml, $chave, $cnpj){
-		try{
+	// public function transmitir($signXml, $chave, $cnpj){
+	// 	try{
+	// 		$idLote = str_pad(100, 15, '0', STR_PAD_LEFT);
+	// 		$resp = $this->tools->sefazEnviaLote([$signXml], $idLote, 1);
+	// 		sleep(3);
+
+	// 		$st = new Standardize();
+	// 		$std = $st->toStd($resp);
+	// 		sleep(1);
+	// 		if ($std->cStat != 103) {
+
+	// 			return "[$std->cStat] - $std->xMotivo";
+	// 		}
+	// 		$recibo = $std->infRec->nRec; 
+	// 		$protocolo = $this->tools->sefazConsultaRecibo($recibo);
+	// 		// return $protocolo;
+	// 		$public = getenv('SERVIDOR_WEB') ? 'public/' : '';
+	// 		try {
+	// 			$xml = Complements::toAuthorize($signXml, $protocolo);
+	// 			header('Content-type: text/xml; charset=UTF-8');
+	// 			if(!is_dir(public_path('xml_devolucao/'.$cnpj))){
+	// 				mkdir(public_path('xml_devolucao/'.$cnpj), 0777, true);
+	// 			}
+	// 			file_put_contents(public_path('xml_devolucao/'.$cnpj.'/'.$chave.'.xml'), $xml);
+	// 			return $recibo;
+	// 			// $this->printDanfe($xml);
+	// 		} catch (\Exception $e) {
+	// 			return ['erro' => true, 'protocolo' => $st->toJson($protocolo), 'status' => 401];
+	// 		}
+
+	// 	} catch(\Exception $e){
+	// 		return ['erro' => true, 'protocolo' => $e->getMessage(), 'status' => 401];
+	// 	}
+
+	// }	
+
+	public function transmitir($signXml, $chave, $cnpj)
+	{
+		try {
 			$idLote = str_pad(100, 15, '0', STR_PAD_LEFT);
-			$resp = $this->tools->sefazEnviaLote([$signXml], $idLote);
-			sleep(3);
 
-			$st = new Standardize();
+			// >>> Forçar processamento SÍNCRONO para 1 NF-e (terceiro parâmetro = 1)
+			$resp = $this->tools->sefazEnviaLote([$signXml], $idLote, 1);
+
+			$st  = new Standardize();
 			$std = $st->toStd($resp);
-			sleep(1);
-			if ($std->cStat != 103) {
 
-				return "[$std->cStat] - $std->xMotivo";
-			}
-			$recibo = $std->infRec->nRec; 
-			$protocolo = $this->tools->sefazConsultaRecibo($recibo);
-			// return $protocolo;
-			$public = getenv('SERVIDOR_WEB') ? 'public/' : '';
-			try {
-				$xml = Complements::toAuthorize($signXml, $protocolo);
-				header('Content-type: text/xml; charset=UTF-8');
-				if(!is_dir(public_path('xml_devolucao/'.$cnpj))){
-					mkdir(public_path('xml_devolucao/'.$cnpj), 0777, true);
+			// --------- Fluxo SÍNCRONO: cStat = 104 -----------
+			if ($std->cStat == 104) {
+				$infProt = $std->protNFe->infProt ?? null;
+
+				if ($infProt && in_array((string)$infProt->cStat, ['100', '110', '150'])) {
+					// Autorizada / Uso autorizado / Autorização fora do prazo
+					$xmlAut = Complements::toAuthorize($signXml, $resp);
+
+					if (!is_dir(public_path('xml_devolucao/' . $cnpj))) {
+						mkdir(public_path('xml_devolucao/' . $cnpj), 0777, true);
+					}
+					file_put_contents(public_path("xml_devolucao/{$cnpj}/{$chave}.xml"), $xmlAut);
+
+					return [
+						'ok'      => true,
+						'message' => 'Autorizada',
+						'cStat'   => (string)$infProt->cStat,
+						'xMotivo' => (string)$infProt->xMotivo,
+						'nProt'   => isset($infProt->nProt) ? (string)$infProt->nProt : null,
+						'http_status' => 200,
+					];
 				}
-				file_put_contents(public_path('xml_devolucao/'.$cnpj.'/'.$chave.'.xml'), $xml);
-				return $recibo;
-				// $this->printDanfe($xml);
-			} catch (\Exception $e) {
-				return ['erro' => true, 'protocolo' => $st->toJson($protocolo), 'status' => 401];
+
+				// 104, mas com rejeição no infProt
+				return [
+					'ok'         => false,
+					'cStat'      => isset($infProt->cStat) ? (string)$infProt->cStat : (string)$std->cStat,
+					'xMotivo'    => isset($infProt->xMotivo) ? (string)$infProt->xMotivo : (string)($std->xMotivo ?? 'Rejeição'),
+					'http_status' => 422,
+				];
 			}
 
-		} catch(\Exception $e){
-			return ['erro' => true, 'protocolo' => $e->getMessage(), 'status' => 401];
+			// --------- Fluxo ASSÍNCRONO: cStat = 103 -----------
+			if ($std->cStat == 103) {
+				$recibo = $std->infRec->nRec ?? null;
+				if (!$recibo) {
+					return [
+						'ok'         => false,
+						'cStat'      => (string)$std->cStat,
+						'xMotivo'    => 'Recibo não retornado pela SEFAZ.',
+						'http_status' => 422,
+					];
+				}
+
+				sleep(2);
+				$protResp = $this->tools->sefazConsultaRecibo($recibo);
+				$protStd  = $st->toStd($protResp);
+
+				if ($protStd->cStat == 104) {
+					$infProt = $protStd->protNFe->infProt ?? null;
+
+					if ($infProt && in_array((string)$infProt->cStat, ['100', '110', '150'])) {
+						$xmlAut = Complements::toAuthorize($signXml, $protResp);
+
+						if (!is_dir(public_path('xml_devolucao/' . $cnpj))) {
+							mkdir(public_path('xml_devolucao/' . $cnpj), 0777, true);
+						}
+						file_put_contents(public_path("xml_devolucao/{$cnpj}/{$chave}.xml"), $xmlAut);
+
+						return [
+							'ok'         => true,
+							'message'    => 'Autorizada',
+							'cStat'      => (string)$infProt->cStat,
+							'xMotivo'    => (string)$infProt->xMotivo,
+							'nProt'      => isset($infProt->nProt) ? (string)$infProt->nProt : null,
+							'recibo'     => (string)$recibo,
+							'http_status' => 200,
+						];
+					}
+
+					return [
+						'ok'         => false,
+						'cStat'      => isset($infProt->cStat) ? (string)$infProt->cStat : (string)$protStd->cStat,
+						'xMotivo'    => isset($infProt->xMotivo) ? (string)$infProt->xMotivo : (string)($protStd->xMotivo ?? 'Rejeição'),
+						'http_status' => 422,
+					];
+				}
+
+				return [
+					'ok'         => false,
+					'cStat'      => (string)$protStd->cStat,
+					'xMotivo'    => (string)($protStd->xMotivo ?? 'Falha na consulta do recibo'),
+					'http_status' => 422,
+				];
+			}
+
+			// --------- Qualquer outro cStat (ex.: 452) -----------
+			return [
+				'ok'         => false,
+				'cStat'      => (string)$std->cStat,
+				'xMotivo'    => (string)($std->xMotivo ?? 'Rejeição no envio do lote'),
+				'http_status' => 422,
+			];
+		} catch (\Exception $e) {
+			return [
+				'ok'         => false,
+				'error'      => true,
+				'message'    => $e->getMessage(),
+				'http_status' => 500,
+			];
 		}
+	}
 
-	}	
 
-	public function format($number, $dec = 2){
+	public function format($number, $dec = 2)
+	{
 		return number_format((float) $number, $dec, ".", "");
 	}
 
-	public function cancelar($devolucao, $justificativa, $cnpj){
+	public function cancelar($devolucao, $justificativa, $cnpj)
+	{
 		try {
 
 			$chave = $devolucao->chave_gerada;
@@ -685,7 +802,7 @@ class DevolucaoService{
 			$stdCl = new Standardize($response);
 			$arr = $stdCl->toArray();
 			sleep(1);
-				// return $arr;
+			// return $arr;
 			$xJust = $justificativa;
 
 
@@ -699,35 +816,36 @@ class DevolucaoService{
 			$json = $stdCl->toJson();
 
 			if ($std->cStat != 128) {
-        //TRATAR
+				//TRATAR
 			} else {
 				$cStat = $std->retEvento->infEvento->cStat;
 				$public = getenv('SERVIDOR_WEB') ? 'public/' : '';
-				if ($cStat == '101' || $cStat == '135' || $cStat == '155' ) {
-            //SUCESSO PROTOCOLAR A SOLICITAÇÂO ANTES DE GUARDAR
+				if ($cStat == '101' || $cStat == '135' || $cStat == '155') {
+					//SUCESSO PROTOCOLAR A SOLICITAÇÂO ANTES DE GUARDAR
 					$xml = Complements::toAuthorize($this->tools->lastRequest, $response);
-					if(!is_dir(public_path('xml_devolucao_cancelado/'.$cnpj))){
-						mkdir(public_path('xml_devolucao_cancelado/'.$cnpj), 0777, true);
+					if (!is_dir(public_path('xml_devolucao_cancelado/' . $cnpj))) {
+						mkdir(public_path('xml_devolucao_cancelado/' . $cnpj), 0777, true);
 					}
-					file_put_contents(public_path('xml_devolucao_cancelado/'.$cnpj.'/'.$chave.'.xml'), $xml);
+					file_put_contents(public_path('xml_devolucao_cancelado/' . $cnpj . '/' . $chave . '.xml'), $xml);
 					return $arr;
 				} else {
-					return ['erro' => true, 'data' => $arr, 'status' => 402];	
+					return ['erro' => true, 'data' => $arr, 'status' => 402];
 				}
-			}    
+			}
 		} catch (\Exception $e) {
 			return $e->getMessage();
 			return ['erro' => true, 'data' => $e->getMessage(), 'status' => 402];
-    //TRATAR
+			//TRATAR
 		}
 	}
 
-	public function cartaCorrecao($devolucao, $correcao, $cnpj){
+	public function cartaCorrecao($devolucao, $correcao, $cnpj)
+	{
 		try {
 
 			$chave = $devolucao->chave_gerada;
 			$xCorrecao = $correcao;
-			$nSeqEvento = $devolucao->sequencia_cce+1;
+			$nSeqEvento = $devolucao->sequencia_cce + 1;
 			$response = $this->tools->sefazCCe($chave, $xCorrecao, $nSeqEvento);
 			sleep(2);
 
@@ -740,31 +858,28 @@ class DevolucaoService{
 			$json = $stdCl->toJson();
 
 			if ($std->cStat != 128) {
-        //TRATAR
+				//TRATAR
 			} else {
 				$cStat = $std->retEvento->infEvento->cStat;
 				if ($cStat == '135' || $cStat == '136') {
 					$public = getenv('SERVIDOR_WEB') ? 'public/' : '';
-            //SUCESSO PROTOCOLAR A SOLICITAÇÂO ANTES DE GUARDAR
+					//SUCESSO PROTOCOLAR A SOLICITAÇÂO ANTES DE GUARDAR
 					$xml = Complements::toAuthorize($this->tools->lastRequest, $response);
 
-					if(!is_dir(public_path('xml_devolucao_correcao/'.$cnpj))){
-						mkdir(public_path('xml_devolucao_correcao/'.$cnpj), 0777, true);
+					if (!is_dir(public_path('xml_devolucao_correcao/' . $cnpj))) {
+						mkdir(public_path('xml_devolucao_correcao/' . $cnpj), 0777, true);
 					}
-					file_put_contents(public_path('xml_devolucao_correcao/'.$cnpj.'/'.$chave.'.xml'), $xml);
+					file_put_contents(public_path('xml_devolucao_correcao/' . $cnpj . '/' . $chave . '.xml'), $xml);
 
 					$devolucao->sequencia_cce = $devolucao->sequencia_cce + 1;
 					$devolucao->save();
 					return $arr;
-
 				} else {
-					return ['erro' => true, 'data' => $arr, 'status' => 402];	
-
+					return ['erro' => true, 'data' => $arr, 'status' => 402];
 				}
-			}    
+			}
 		} catch (\Exception $e) {
 			return $e->getMessage();
 		}
 	}
-
 }

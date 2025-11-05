@@ -1,0 +1,1 @@
+Erro de comunicação via soap,  Failed to connect to nfe.sefaz.go.gov.br port 443 after 20002 ms: Timeout was reached [https://nfe.sefaz.go.gov.br/nfe/services/NFeAutorizacao4]
