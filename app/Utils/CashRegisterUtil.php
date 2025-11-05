@@ -23,7 +23,7 @@ class CashRegisterUtil extends Util
         $count = CashRegister::where('user_id', $user_id)
         ->where('status', 'open')
         ->count();
-        return true;
+        return $count;
     }
 
     /**

@@ -1,0 +1,1 @@
+Erro de comunicação via soap,  Recv failure: Connection reset by peer [https://nfe.sefaz.go.gov.br/nfe/services/NFeAutorizacao4]

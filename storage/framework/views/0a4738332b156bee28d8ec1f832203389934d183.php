@@ -1,3 +1,4 @@
+
 <?php $__env->startSection('title', __('business.business_settings')); ?>
 
 <?php $__env->startSection('content'); ?>

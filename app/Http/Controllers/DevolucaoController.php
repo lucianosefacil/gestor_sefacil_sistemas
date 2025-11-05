@@ -1025,10 +1025,71 @@ class DevolucaoController extends Controller
 		}
 	}
 
+	// public function transmitir(Request $request)
+	// {
+
+	// 	$business_id = request()->session()->get('user.business_id');
+	// 	$devolucao = Devolucao::where('business_id', $business_id)
+	// 		->where('id', $request->devolucao_id)
+	// 		->first();
+
+	// 	if (!$devolucao) {
+	// 		abort(403, 'Unauthorized action.');
+	// 	}
+
+	// 	// $config = Business::find($business_id);
+	// 	$config = Business::getConfig($business_id, $devolucao);
+
+	// 	$cnpj = str_replace(".", "", $config->cnpj);
+	// 	$cnpj = str_replace("/", "", $cnpj);
+	// 	$cnpj = str_replace("-", "", $cnpj);
+	// 	$cnpj = str_replace(" ", "", $cnpj);
+
+	// 	$devolucao_service = new DevolucaoService([
+	// 		"atualizacao" => date('Y-m-d h:i:s'),
+	// 		"tpAmb" => (int)$config->ambiente,
+	// 		"razaosocial" => $config->razao_social,
+	// 		"siglaUF" => $config->cidade->uf,
+	// 		"cnpj" => $cnpj,
+	// 		"schemes" => "PL_009_V4",
+	// 		"versao" => "4.00",
+	// 		"tokenIBPT" => "AAAAAAA",
+	// 		"CSC" => $config->csc,
+	// 		"CSCid" => $config->csc_id
+	// 	], $config);
+
+	// 	if ($devolucao->estado == 0 || $devolucao->estado == 2) {
+	// 		header('Content-type: text/html; charset=UTF-8');
+
+	// 		$nfe = $devolucao_service->gerarDevolucao($devolucao);
+	// 		// return response()->json($signed, 200);
+
+	// 		$signed = $devolucao_service->sign($nfe['xml']);
+	// 		// return response()->json($signed, 200);
+	// 		$resultado = $devolucao_service->transmitir($signed, $nfe['chave'], $cnpj);
+
+	// 		if (!isset($resultado['erro'])) {
+	// 			$devolucao->chave_gerada = $nfe['chave'];
+	// 			$devolucao->numero_gerado = $nfe['nNf'];
+	// 			$devolucao->estado = 1;
+	// 			$devolucao->save();
+	// 			return response()->json($resultado, 200);
+	// 		} else {
+	// 			$devolucao->estado = 2;
+	// 			$devolucao->save();
+	// 			return response()->json($resultado['protocolo'], $resultado['status']);
+	// 		}
+	// 	} else {
+	// 		return response()->json("Erro", 200);
+	// 	}
+
+	// 	return response()->json($xml, 200);
+	// }
+
 	public function transmitir(Request $request)
 	{
-
 		$business_id = request()->session()->get('user.business_id');
+
 		$devolucao = Devolucao::where('business_id', $business_id)
 			->where('id', $request->devolucao_id)
 			->first();
@@ -1037,53 +1098,65 @@ class DevolucaoController extends Controller
 			abort(403, 'Unauthorized action.');
 		}
 
-		// $config = Business::find($business_id);
 		$config = Business::getConfig($business_id, $devolucao);
 
-		$cnpj = str_replace(".", "", $config->cnpj);
-		$cnpj = str_replace("/", "", $cnpj);
-		$cnpj = str_replace("-", "", $cnpj);
-		$cnpj = str_replace(" ", "", $cnpj);
+		$cnpj = preg_replace('/[^0-9]/', '', $config->cnpj);
 
 		$devolucao_service = new DevolucaoService([
 			"atualizacao" => date('Y-m-d h:i:s'),
-			"tpAmb" => (int)$config->ambiente,
+			"tpAmb"       => (int)$config->ambiente,
 			"razaosocial" => $config->razao_social,
-			"siglaUF" => $config->cidade->uf,
-			"cnpj" => $cnpj,
-			"schemes" => "PL_009_V4",
-			"versao" => "4.00",
-			"tokenIBPT" => "AAAAAAA",
-			"CSC" => $config->csc,
-			"CSCid" => $config->csc_id
+			"siglaUF"     => $config->cidade->uf,
+			"cnpj"        => $cnpj,
+			"schemes"     => "PL_009_V4",
+			"versao"      => "4.00",
+			"tokenIBPT"   => "AAAAAAA",
+			"CSC"         => $config->csc,
+			"CSCid"       => $config->csc_id
 		], $config);
 
 		if ($devolucao->estado == 0 || $devolucao->estado == 2) {
-			header('Content-type: text/html; charset=UTF-8');
 
 			$nfe = $devolucao_service->gerarDevolucao($devolucao);
-			// return response()->json($signed, 200);
 
-			$signed = $devolucao_service->sign($nfe['xml']);
-			// return response()->json($signed, 200);
-			$resultado = $devolucao_service->transmitir($signed, $nfe['chave'], $cnpj);
-
-			if (!isset($resultado['erro'])) {
-				$devolucao->chave_gerada = $nfe['chave'];
-				$devolucao->numero_gerado = $nfe['nNf'];
-				$devolucao->estado = 1;
-				$devolucao->save();
-				return response()->json($resultado, 200);
-			} else {
+			// Se houve erro estrutural na montagem, devolve
+			if (isset($nfe['xml_erros'])) {
 				$devolucao->estado = 2;
 				$devolucao->save();
-				return response()->json($resultado['protocolo'], $resultado['status']);
+				return response()->json([
+					'ok'       => false,
+					'message'  => 'Erros de XML',
+					'detalhes' => $nfe['xml_erros']
+				], 422);
 			}
-		} else {
-			return response()->json("Erro", 200);
+
+			$signed    = $devolucao_service->sign($nfe['xml']);
+			$resultado = $devolucao_service->transmitir($signed, $nfe['chave'], $cnpj);
+
+			// $resultado é array (conforme Service)
+			if (!empty($resultado['ok'])) {
+				// Autorizada
+				$devolucao->chave_gerada  = $nfe['chave'];
+				$devolucao->numero_gerado = $nfe['nNf'];
+				$devolucao->estado        = 1;
+				$devolucao->save();
+
+				return response()->json($resultado, 200);
+			}
+
+			// Rejeitada / erro
+			$devolucao->estado = 2;
+			$devolucao->save();
+
+			$http = $resultado['http_status'] ?? 422;
+			return response()->json($resultado, $http);
 		}
 
-		return response()->json($xml, 200);
+		// Já emitida ou cancelada
+		return response()->json([
+			'ok'      => false,
+			'message' => 'Documento já emitido ou cancelado.',
+		], 409);
 	}
 
 	public function imprimir($id)

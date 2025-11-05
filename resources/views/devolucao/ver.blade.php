@@ -194,45 +194,81 @@
           },
           url: '{{ route("devolucao.transmitir") }}',
           dataType: 'json',
-          success: function(e){
-            console.log(e)
-
-            swal("sucesso", "Devolução emitida, recibo: " + e, "success")
-            .then(() => {
-              window.open(path + '/devolucao/imprimir/'+devolucao_id)
-              location.reload()
-            });
-            $('#action').css('display', 'none')
 
 
-          }, error: function(e){
-            $('#action').css('display', 'none')
+          // success: function(e){
+          //   console.log(e)
+          //   swal("sucesso", "Devolução emitida, recibo: " + e, "success")
+          //   .then(() => {
+          //     window.open(path + '/devolucao/imprimir/'+devolucao_id)
+          //     location.reload()
+          //   });
+          //   $('#action').css('display', 'none')
+
+
+          // }, error: function(e){
+          //   $('#action').css('display', 'none')
             
-            console.log(e)
-            if(e.status == 402){
-              swal("Erro ao transmitir", e.responseJSON, "error");
-              $('#action').css('display', 'none')
+          //   console.log(e)
+          //   if(e.status == 402){
+          //     swal("Erro ao transmitir", e.responseJSON, "error");
+          //     $('#action').css('display', 'none')
 
-            }else if(e.status == 500){
-              swal("Erro ao transmitir", e.responseJSON.message, "error");
+          //   }else if(e.status == 500){
+          //     swal("Erro ao transmitir", e.responseJSON.message, "error");
               
-            }else{
-              $('#action').css('display', 'none')
-              try{
+          //   }else{
+          //     $('#action').css('display', 'none')
+          //     try{
 
-                let jsError = JSON.parse(e.responseJSON)
-                console.log(jsError)
-                swal("Erro ao transmitir", jsError.protNFe.infProt.xMotivo, "error");
-              }catch{
-                swal("Erro ao transmitir", e.responseJSON, "error");
+          //       let jsError = JSON.parse(e.responseJSON)
+          //       console.log(jsError)
+          //       swal("Erro ao transmitir", jsError.protNFe.infProt.xMotivo, "error");
+          //     }catch{
+          //       swal("Erro ao transmitir", e.responseJSON, "error");
+          //     }
 
-              }
+          //   }
+          // }
 
-            }
-          }
+           success: function(resp){
+  console.log(resp);
+  $('#action').css('display', 'none');
+
+  if (resp.ok) {
+    // sucesso: autorizada
+    swal("Sucesso", `Devolução autorizada (${resp.cStat} - ${resp.xMotivo})`, "success")
+      .then(() => {
+        window.open(path + '/devolucao/imprimir/' + devolucao_id);
+        location.reload();
+      });
+  } else {
+    // rejeição ou retorno não autorizado
+    if (resp.cStat) {
+      swal("Rejeitada", `[${resp.cStat}] - ${resp.xMotivo || 'Motivo não informado'}`, "error");
+    } else {
+      swal("Erro ao transmitir", resp.message || "Falha inesperada no retorno da SEFAZ", "error");
+    }
+  }
+},
+error: function(e){
+  console.log(e);
+  $('#action').css('display', 'none');
+
+  try {
+    const r = e.responseJSON || {};
+    if (r.cStat) {
+      swal("Erro ao transmitir", `[${r.cStat}] - ${r.xMotivo || 'Motivo não informado'}`, "error");
+    } else {
+      swal("Erro ao transmitir", r.message || "Falha inesperada", "error");
+    }
+  } catch {
+    swal("Erro ao transmitir", "Falha inesperada", "error");
+  }
+}
+
 
         })
-
       })
 
       $('#corrigir').click(() => {

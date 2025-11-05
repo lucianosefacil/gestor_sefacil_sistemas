@@ -42,11 +42,11 @@ awstats/
 /uploads
 /composer.lock
 /storage/*
-!/storage/app/
-!/storage/framework/
-!/storage/logs/
-!/storage/app/.empty
-!/storage/framework/.empty
-!/storage/logs/.empty
+/storage/app/
+/storage/framework/
+/storage/logs/
+/storage/app/.empty
+/storage/framework/.empty
+/storage/logs/.empty
 /storage/framework/sessions/*
 

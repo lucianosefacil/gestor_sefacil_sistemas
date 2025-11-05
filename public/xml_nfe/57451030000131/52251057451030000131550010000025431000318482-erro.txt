@@ -1,0 +1,1 @@
+Erro de comunicação via soap,  SSL connection timeout [https://nfe.sefaz.go.gov.br/nfe/services/NFeAutorizacao4]

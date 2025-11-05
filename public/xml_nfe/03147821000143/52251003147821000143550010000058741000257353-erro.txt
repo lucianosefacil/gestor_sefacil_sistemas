@@ -1,0 +1,1 @@
+Erro de comunicação via soap,  Could not resolve host: nfe.sefaz.go.gov.br [https://nfe.sefaz.go.gov.br/nfe/services/NFeAutorizacao4]
