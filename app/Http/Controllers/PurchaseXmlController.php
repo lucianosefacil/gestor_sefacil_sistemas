@@ -420,8 +420,12 @@ class PurchaseXmlController extends Controller
 				'dadosNf' => $dadosNf,
 			]);
 
-			$purchase = Transaction::firstOrCreate(
-				['chave_entrada' => $dadosNf['chave']],
+			$purchase = Transaction::updateOrCreate(
+				[
+					'chave_entrada' => $dadosNf['chave'],
+					'business_id'   => $business_id,
+					// opcional: 'location_id' => $request->location_id,
+				],
 				[
 					'business_id' => $business_id,
 					'type' => 'purchase',
