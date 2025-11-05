@@ -393,6 +393,8 @@ class PurchaseXmlController extends Controller
 			$dadosNf = json_decode($request->dadosNf, true);
 			$conversao = explode(",", $request->conversao);
 
+			// dd($dadosNf);
+
 			$contact = $this->validaFornecedorCadastrado([
 				'business_id' => $contact['business_id'],
 				'city_id' => $contact['city_id'],
@@ -421,6 +423,7 @@ class PurchaseXmlController extends Controller
 					'transaction_date' => now(),
 					'created_by' => $user_id,
 					'numero_nfe_entrada' => $dadosNf['nNf'][0],
+					'chave_entrada' => $dadosNf['chave'],
 					'estado' => 'APROVADO',
 					'location_id' => $request->location_id,
 					'final_total' => $dadosNf['vFinal'],
