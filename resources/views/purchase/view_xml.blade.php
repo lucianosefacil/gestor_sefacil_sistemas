@@ -69,9 +69,12 @@
             </div>
 
             <input type="hidden" value="{{ json_encode($contact) }}" name="contact">
-            <input type="hidden" value="{{ json_encode($itens) }}" name="itens">
-            <input type="hidden" value="{{ json_encode($fatura) }}" name="fatura">
+            {{-- <input type="hidden" value="{{ json_encode($itens) }}" name="itens"> --}}
+            {{-- <input type="hidden" value="{{ json_encode($fatura) }}" name="fatura"> --}}
             <input type="hidden" value="{{ json_encode($dadosNf) }}" name="dadosNf">
+
+            <input type="hidden" name="itens_json" id="itens_json">
+            <input type="hidden" name="fatura_json" id="fatura_json">
 
             <div class="row">
                 <div class="col-sm-12">
@@ -136,8 +139,10 @@
                                             <div id="product_table_wrapper"
                                                 class="dataTables_wrapper form-inline dt-bootstrap no-footer">
                                                 <div class="row margin-bottom-20 text-center">
-                                                    <table class="table table-bordered table-striped ajax_view hide-footer dataTable no-footer tabela_produto"
-                                                        id="product_table_p" role="grid" aria-describedby="product_table_info"
+                                                    <table 
+                                                    class="table table-bordered table-striped ajax_view hide-footer dataTable no-footer tabela_produto"
+                                                        id="product_table_p" role="grid" 
+                                                        aria-describedby="product_table_info"
                                                         style="width: 1300px;">
                                                         <thead>
                                                             <tr role="row">
@@ -246,7 +251,7 @@
                                                                     </td>
                                                                     <td style="width: 150px;">
                                                                         <input style="width: 150px;"
-                                                                            class="form-control codBarras" id="codBarras" value="{{ $i['codBarras'] }}" type=""name="codBarras[]">
+                                                                            class="form-control codBarras" id="codBarras" value="{{ $i['codBarras'] }}" type="" name="codBarras[]">
                                                                     </td>
                                                                     <td style="width: 100px;">
                                                                         <input style="width: 80px;" class="form-control"
@@ -312,19 +317,19 @@
                                                                             name="product_atribuido[]">
                                                                     </td>
                                                                     <td style="width: 100px">
-                                                                        <input style="width: 100px" type="hidden"
+                                                                        <input style="width: 100px" type="text"
                                                                             class="form-control" id=""
                                                                             value="{{ $i['productId'] }}"
                                                                             name="product_id[]">
                                                                     </td>
                                                                     <td style="width: 100px">
-                                                                        <input style="width: 100px" type="hidden"
+                                                                        <input style="width: 100px" type="text"
                                                                             class="form-control" id=""
                                                                             value="{{ $i['produtoVariationAtribuido'] }}"
                                                                             name="variation_id[]">
                                                                     </td>
                                                                     <td style="width: 100px">
-                                                                        <input style="width: 100px" type="hidden"
+                                                                        <input style="width: 100px" type="text"
                                                                             class="form-control" id=""
                                                                             value="{{ $i['idProdutoSku'] }}"
                                                                             name="id_produto_sku[]">
@@ -443,7 +448,6 @@
                 </div>
                 <div class="row">
                     <div class="col-sm-12">
-                        {{-- <button type="submit" class="btn btn-primary pull-right btn-flat">Salvar Compra</button> --}}
                         <button type="button" class="btn btn-primary pull-right btn-flat btnSalvarCompra" id="btnSalvarCompra">
                             Salvar Compra
                         </button>
@@ -746,6 +750,102 @@
                 }
             });
         }
+
+        $('#add_purchase_form').on('submit', function(e) {
+        e.preventDefault();
+
+        const btnSalvar = $('button[type="submit"], .btnSalvarCompra');
+        btnSalvar.prop('disabled', true);
+        btnSalvar.html('<i class="fa fa-spinner fa-spin"></i> Salvando...');
+
+        let itensArray = [];
+        $('#itens tr').each(function() {
+            let item = {
+                produto: $(this).find('input[name="produto[]"]').val(),
+                codigo: $(this).find('input[name="codigo[]"]').val(),
+                ncm: $(this).find('input[name="ncm[]"]').val(),
+                cfop_interno: $(this).find('input[name="cfop_interno[]"]').val(),
+                cfop_externo: $(this).find('input[name="cfop_externo[]"]').val(),
+                cst_csosn: $(this).find('select[name="cst_csosn[]"]').val(),
+                qCom: $(this).find('input[name="qCom[]"]').val(),
+                vUnCom: $(this).find('input[name="vUnCom[]"]').val(),
+                codBarras: $(this).find('input[name="codBarras[]"]').val(),
+                uCom: $(this).find('input[name="uCom[]"]').val(),
+                unid_venda: $(this).find('select[name="unid_venda[]"]').val(),
+                valor_custo: $(this).find('input[name="valor_custo[]"]').val(),
+                margem_lucro: $(this).find('input[name="margem_lucro[]"]').val(),
+                valor_venda: $(this).find('input[name="valor_venda[]"]').val(),
+                product_atribuido: $(this).find('input[name="product_atribuido[]"]').val(),
+                product_id: $(this).find('input[name="product_id[]"]').val(),
+                variation_id: $(this).find('input[name="variation_id[]"]').val(),
+                id_produto_sku: $(this).find('input[name="id_produto_sku[]"]').val(),
+            };
+            itensArray.push(item);
+        });
+
+    let faturaArray = [];
+    $('#product_table tbody tr').each(function() {
+        let numero = $(this).find('td').eq(0).text();
+        let vencimento = $(this).find('td').eq(1).text();
+        let valor = $(this).find('td').eq(2).text();
+        if (numero != 'Nenhuma fatura neste XML') {
+            faturaArray.push({
+                numero: numero,
+                vencimento: vencimento,
+                valor_parcela: valor
+            });
+        }
+    });
+
+    let contact = $('input[name="contact"]').val();
+    let dadosNf = $('input[name="dadosNf"]').val();
+    let perc_venda = $('#perc_venda').val();
+    let conversao = $('#conversao').val();
+    let location_id = $('#location_id').val();
+
+    const chunkSize = 50;
+    let totalChunks = Math.ceil(itensArray.length / chunkSize);
+
+    function enviarChunk(index) {
+        if (index >= totalChunks) {
+            swal('Sucesso', 'Todos os produtos foram salvos!', 'success').then(() => {
+                window.location.href = "/purchases";
+            });
+            return;
+        }
+
+        let itens_chunk = itensArray.slice(index * chunkSize, (index + 1) * chunkSize);
+
+        $.ajax({
+            url: '/purchase-xml/save',
+            method: 'POST',
+            data: {
+                _token: $('meta[name="csrf-token"]').attr('content'),
+                contact: contact,
+                itens_json: JSON.stringify(itens_chunk),
+                fatura_json: JSON.stringify(faturaArray),
+                dadosNf: dadosNf,
+                perc_venda: perc_venda,
+                conversao: conversao,
+                location_id: location_id,
+                append: index > 0, // << ADICIONAR
+                finalize: index == totalChunks - 1 // << ADICIONAR
+            },
+            success: function(response) {
+                console.log('Bloco ' + (index + 1) + ' enviado com sucesso!');
+                enviarChunk(index + 1);
+            },
+            error: function(xhr) {
+                console.error('Erro ao enviar bloco ' + (index + 1), xhr.responseText);
+                swal('Erro', 'Erro ao enviar bloco ' + (index + 1), 'error');
+
+                btnSalvar.prop('disabled', false);
+                btnSalvar.html('Salvar Compra');
+            }
+        });
+    }
+    enviarChunk(0);
+});
     </script>
 @endsection
 
