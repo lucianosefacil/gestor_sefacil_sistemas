@@ -17,6 +17,7 @@ use App\Models\BusinessLocation;
 use App\Models\Devolucao;
 use App\Models\TransactionPayment;
 use App\Models\ProdutoSku;
+use Illuminate\Support\Facades\Log;
 
 
 class PurchaseXmlController extends Controller
@@ -412,6 +413,13 @@ class PurchaseXmlController extends Controller
 				'created_by' => $contact['created_by']
 			]);
 
+			Log::info('purchase-xml/save payload', [
+				'business_id' => session('user.business_id'),
+				'contact' => $contact,
+				'count_itens' => count($itens),
+				'dadosNf' => $dadosNf,
+			]);
+
 			$purchase = Transaction::firstOrCreate(
 				['chave_entrada' => $dadosNf['chave']],
 				[
@@ -432,6 +440,17 @@ class PurchaseXmlController extends Controller
 					'discount_type' => $dadosNf['vDesc'][0] > 0 ? 'fixed' : null
 				]
 			);
+
+			Log::info('purchase-xml/save purchase', [
+				'purchase' => $purchase,
+				'itens' => $itens,
+				'fatura' => $fatura,
+				'dadosNf' => $dadosNf,
+				'conversao' => $conversao,
+				'location_id' => $request->location_id,
+				'contact' => $contact,
+				'business' => $business,
+			]);
 
 			foreach ($itens as $i => $item) {
 				$taxa = (int)($conversao[$i] ?? 1);
@@ -600,6 +619,12 @@ class PurchaseXmlController extends Controller
 
 			return response()->json(['success' => true, 'message' => 'Bloco salvo com sucesso.']);
 		} catch (\Exception $e) {
+
+			Log::error('purchase-xml/save error', [
+				'error' => $e->getMessage(),
+				'trace' => $e->getTraceAsString(),
+			]);
+
 			return response()->json(['success' => false, 'message' => $e->getMessage()]);
 		}
 	}
