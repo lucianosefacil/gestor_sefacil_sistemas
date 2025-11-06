@@ -372,7 +372,7 @@ class CTeService
 		$icms->outraUF = false;
 		$icms->vICMSUFIni = 0;
 		$icms->vICMSUFFim = 0;
-		$icms->infAdFisco = '';
+		// $icms->infAdFisco = '';
 		$cte->tagicms($icms);
 
 		$cte->taginfCTeNorm();              // Grupo de informações do CT-e Normal e Substituto
