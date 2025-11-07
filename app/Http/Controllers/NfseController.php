@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Mail;
 use Webmaniabr\Nfse\Models\NFSe as NFSeWeb;
 use App\Models\User;
 use App\Models\City;
-use CloudDfe\SdkPHP\NFSe as NfseSdk;
+use CloudDfe\SdkPHP\Nfse as NfseSdk;
 
 
 
