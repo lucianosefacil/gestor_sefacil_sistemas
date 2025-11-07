@@ -17,6 +17,7 @@ use App\Http\Controllers\FiscalInventoryReportController;
 use App\Http\Controllers\CertificadoController;
 use App\Models\Transaction;
 use App\Models\Test;
+use Illuminate\Support\Facades\Route;
 
 
 Route::middleware(['authh'])->group(function () {
@@ -208,6 +209,38 @@ Route::middleware(['authh', 'auth', 'SetSessionData', 'language', 'timezone', 'A
     });
 
 
+    Route::group(['prefix' => '/nfse'], function () {
+        Route::get('/', 'NfseController@index')->name('nfse.index');
+        Route::get('/create', 'NfseController@create')->name('nfse.create');
+        Route::post('/store', 'NfseController@store')->name('nfse.store');
+        Route::get('/edit/{id}', 'NfseController@edit')->name('nfse.edit');
+        Route::put('/update/{id}', 'NfseController@update')->name('nfse.update');
+        Route::get('/delete/{id}', 'NfseController@delete')->name('nfse.delete');
+        Route::get('/clone/{id}', 'NfseController@clone')->name('nfse.clone');
+        Route::get('/filtro', 'NfseController@filtro')->name('nfse.filtro');
+
+        Route::post('/enviar', 'NfseIntegraNotasController@enviar')->name('nfse.enviar');
+        Route::post('/consultar', 'NfseIntegraNotasController@consultar')->name('nfse.consultar');
+        Route::post('/cancelar', 'NfseIntegraNotasController@cancelar')->name('nfse.cancelar');
+        Route::get('/preview-xml/{id}', 'NfseIntegraNotasController@previewXml')->name('nfse.preview');
+
+        Route::get('/baixarXml/{id}', 'NfseController@baixarXml')->name('nfse.baixarXml');
+        Route::get('/imprimir/{id}', 'NfseController@imprimir')->name('nfse.imprimir');
+        Route::post('/enviar-xml', 'NfseController@enviarXml')->name('nfse.enviarXml');
+        Route::post('/store-ajax', 'NfseController@storeAjax')->name('nfse.storeAjax');
+        Route::get('/{id}/imprimir-cancelamento', 'NfseController@imprimirCancelamento')->name('nfse.imprimir_cancelamento');
+        Route::get('/{id}/cancelamento/pdf', 'NfseController@imprimirCancelamento')->name('nfse.imprimir_cancelamento');
+        Route::get('/{id}/cancelamento/xml', 'NfseController@baixarXmlCancelado')->name('nfse.baixarXmlCancelado');
+    });
+
+    Route::group(['prefix' => '/nfse-config'], function () {
+        Route::get('/', 'NfseConfigController@index')->name('nfse-config.index');
+        Route::post('/store', 'NfseConfigController@store')->name('nfse-config.store');
+        Route::put('/update/{id}', 'NfseConfigController@update')->name('nfse-config.update');
+        Route::get('/certificado', 'NfseConfigController@certificado')->name('nfse-config.certificado');
+        Route::get('/new-token', 'NfseConfigController@newToken')->name('nfse-config.new-token');
+    });
+    
 
     Route::group(['prefix' => 'nuvemshop'], function () {
         Route::get('/', 'NuvemShopAuthController@index');
@@ -435,6 +468,7 @@ Route::middleware(['authh', 'auth', 'SetSessionData', 'language', 'timezone', 'A
     Route::get('/contacts/customers', 'ContactController@getCustomers');
     Route::get('/contacts/validaCnpjCadastrado', 'ContactController@validaCnpjCadastrado')->name('contacts.valida-cnpj');
     Route::get('/buscar-cep', 'ContactController@buscarCep');
+    Route::get('/contacts/customer/{id}', 'ContactController@getCustomerDetails')->name('contacts.customer-details');
 
     Route::resource('contacts', 'ContactController');
 
@@ -477,19 +511,18 @@ Route::middleware(['authh', 'auth', 'SetSessionData', 'language', 'timezone', 'A
 
     Route::resource('products', 'ProductController');
 
-    Route::group(['prefix' => '/servicos'], function(){
-		Route::get('/findId/{id}', 'ServicosController@findId');
+    Route::group(['prefix' => '/servicos'], function () {
+        Route::get('/findId/{id}', 'ServicosController@findId');
         Route::get('/linhaServico', 'ServicosController@linhaServico');
-		Route::get('/findProduto/{id}', 'ServicosController@findProduto');
-		Route::get('/pesquisaProduto', 'ServicosController@pesquisaProduto');
+        Route::get('/findProduto/{id}', 'ServicosController@findProduto');
+        Route::get('/pesquisaProduto', 'ServicosController@pesquisaProduto');
+    });
 
-	});
-
-    Route::group(['prefix' => '/exportar'], function(){
-		Route::get('/', 'ExportarController@index');
-		Route::get('/produtos', 'ExportarController@produtos');
-		Route::get('/clientes', 'ExportarController@clientes');
-	});
+    Route::group(['prefix' => '/exportar'], function () {
+        Route::get('/', 'ExportarController@index');
+        Route::get('/produtos', 'ExportarController@produtos');
+        Route::get('/clientes', 'ExportarController@clientes');
+    });
 
 
     Route::group(['prefix' => 'ordem-servico'], function () {
@@ -512,7 +545,6 @@ Route::middleware(['authh', 'auth', 'SetSessionData', 'language', 'timezone', 'A
         Route::put('/upRelatorio/{id}', 'OrdemServicoController@upRelatorio')->name('ordemServico.upRelatorio');
         Route::get('/gerarNfe/{id}', 'OrdemServicoController@gerarNfe')->name('ordemServico.gerarNfe');
         Route::get('/addProdutos', 'OrdemServicoController@addProdutos');
-
     });
 
     Route::resource('ordem-servico', 'OrdemServicoController');
@@ -676,7 +708,7 @@ Route::middleware(['authh', 'auth', 'SetSessionData', 'language', 'timezone', 'A
     Route::resource('payments', 'TransactionPaymentController');
 
     //TEF Routes - movidas para fora do middleware
-    
+
     // Rotas autenticadas
     Route::prefix('tef')->group(function () {
         Route::post('/processar', 'TefController@processarPagamento')->name('tef.processar');
@@ -738,7 +770,9 @@ Route::middleware(['authh', 'auth', 'SetSessionData', 'language', 'timezone', 'A
     Route::get('backup/download/{file_name}', 'BackUpController@download');
     Route::get('backup/delete/{file_name}', 'BackUpController@delete');
     Route::resource('backup', 'BackUpController', ['only' => [
-        'index', 'create', 'store'
+        'index',
+        'create',
+        'store'
     ]]);
 
     Route::get('selling-price-group/activate-deactivate/{id}', 'SellingPriceGroupController@activateDeactivate');
@@ -843,7 +877,7 @@ Route::middleware(['authh', 'auth', 'SetSessionData', 'language', 'timezone', 'A
 
     // Route::resource('contadores', 'ContadorController'); // Controller não existe
 
-    
+
 
 
     Route::group(['prefix' => 'contador'], function () {
