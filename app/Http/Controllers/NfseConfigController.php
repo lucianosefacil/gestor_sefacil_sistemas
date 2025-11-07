@@ -31,13 +31,15 @@ class NfseConfigController extends Controller
 
     public function certificado(Request $request)
     {
-
         $business_id = request()->session()->get('user.business_id');
         $config = Business::find($business_id);
 
         if ($config == null) {
-            session()->flash('mensagem_erro', 'Sem dados de configuração superadmin!');
-            return redirect()->back();
+            $output = [
+                'success' => 0,
+                'msg' => 'Sem dados de configuração superadmin!'
+            ];
+            return redirect()->back()->with('status', $output);
         }
 
         $certificadoApi = $this->getCertificado();
@@ -69,32 +71,30 @@ class NfseConfigController extends Controller
     {
         $business_id = request()->session()->get('user.business_id');
         $config = Business::find($business_id);
-
         if ($config == null) {
-            session()->flash('mensagem_erro', 'Sem dados de configuração superadmin!');
-            return redirect()->back();
+            $output = [
+                'success' => 0,
+                'msg' => 'Sem dados de configuração superadmin!'
+            ];
+            return redirect()->back()->with('status', $output);
         }
-
         // if (env('token_integra_notas') == null) {
         //     session()->flash('mensagem_erro', 'Sem dados do token integra notas de configuração superadmin!');
         //     return redirect()->back();
         // }
-
         $item = NfseConfig::where('empresa_id', $business_id)
             ->first();
-
         $cidades = City::all();
-
         $configNota = Business::where('id', $business_id)
             ->first();
-
         if ($configNota == null) {
-            session()->flash('mensagem_erro', 'Configure o emitente!');
-            return redirect('/configNF');
+            $output = [
+                'success' => 0,
+                'msg' => 'Configure o emitente!'
+            ];
+            return redirect('/configNF')->with('status', $output);
         }
-
         $tokenNfse = $configNota->token_nfse;
-
         return view('nfse_config.index', compact('item', 'cidades', 'tokenNfse', 'business_id'));
     }
 
@@ -107,22 +107,30 @@ class NfseConfigController extends Controller
             if ($resp->codigo == 200) {
                 $item->token = $resp->token;
                 $item->save();
-
                 $configNota = Business::where('id', $business_id)
                     ->first();
-
                 $configNota->token_nfse = $resp->token;
                 $configNota->integracao_nfse = 'integranotas';
                 $configNota->save();
-
-                session()->flash("mensagem_sucesso", "Configurado com sucesso!");
+                $output = [
+                    'success' => 1,
+                    'msg' => 'Configurado com sucesso!'
+                ];
+                return redirect()->back()->with('status', $output);
             } else {
-                session()->flash('mensagem_erro', $resp->mensagem);
+                $output = [
+                    'success' => 0,
+                    'msg' => $resp->mensagem
+                ];
+                return redirect()->back()->with('status', $output);
             }
         } catch (\Exception $e) {
-            session()->flash('mensagem_erro', 'Algo deu errado: ' . $e->getMessage());
+            $output = [
+                'success' => 0,
+                'msg' => 'Algo deu errado: ' . $e->getMessage()
+            ];
+            return redirect()->back()->with('status', $output);
         }
-        return redirect()->back();
     }
 
     private function storeSofthouse($request)
@@ -182,7 +190,11 @@ class NfseConfigController extends Controller
 
             return $resp;
         } catch (\Exception $e) {
-            session()->flash('mensagem_erro', 'Algo deu errado: ' . $e->getMessage());
+            $output = [
+                'success' => 0,
+                'msg' => 'Algo deu errado: ' . $e->getMessage()
+            ];
+            return redirect()->back()->with('status', $output);
         }
     }
 
@@ -208,25 +220,39 @@ class NfseConfigController extends Controller
 
             $resp = $this->atualizaSofthouse($request, $item);
 
-            if ($resp->codigo == 200) {
-                session()->flash("mensagem_sucesso", "Atualizado com sucesso!");
-            } else {
-                session()->flash('mensagem_erro', $resp->mensagem);
+            if (is_object($resp) && property_exists($resp, 'codigo') && $resp->codigo == 200) {
+                $output = [
+                    'success' => 1,
+                    'msg' => 'Atualizado com sucesso!'
+                ];
+                return redirect()->route('nfse-config.index')->with('status', $output);
             }
+
+            if ($resp instanceof \Illuminate\Http\RedirectResponse) {
+                return $resp;
+            }
+
+            $output = [
+                'success' => 0,
+                'msg' => $resp->mensagem ?? 'Falha ao atualizar emitente.'
+            ];
+            return redirect()->route('nfse-config.index')->with('status', $output);
         } catch (\Exception $e) {
-            session()->flash('mensagem_erro', 'Algo deu errado: ' . $e->getMessage());
+            $output = [
+                'success' => 0,
+                'msg' => 'Algo deu errado: ' . $e->getLine() . ' - ' . $e->getMessage()
+            ];
+            return redirect()->route('nfse-config.index')->with('status', $output);
         }
-        return redirect()->back();
     }
 
     private function atualizaSofthouse($request, $item)
     {
         try {
-            $config = Business::first();
-
+            $config = Business::find($item->empresa_id);
             $params = [
                 'token' => $item->token,
-                'ambiente' => 2,
+                'ambiente' => $config->ambiente,
                 'options' => [
                     'debug' => false,
                     'timeout' => 60,
@@ -283,7 +309,11 @@ class NfseConfigController extends Controller
 
             return $resp;
         } catch (\Exception $e) {
-            session()->flash('mensagem_erro', 'Algo deu errado: ' . $e->getMessage());
+            $output = [
+                'success' => 0,
+                'msg' => 'Algo deu errado: ' . $e->getMessage()
+            ];
+            return redirect()->back()->with('status', $output);
         }
     }
 
@@ -314,8 +344,11 @@ class NfseConfigController extends Controller
         $resp = $softhouse->atualiza($payload);
         // dd($resp);
 
-        session()->flash("mensagem_sucesso", "Logo removida com sucesso!");
-        return redirect()->back();
+        $output = [
+            'success' => 1,
+            'msg' => 'Logo removida com sucesso!'
+        ];
+        return redirect()->back()->with('status', $output);
     }
 
     public function uploadCertificado(Request $request)
@@ -325,8 +358,11 @@ class NfseConfigController extends Controller
         // }
 
         if (!$request->hasFile('file')) {
-            session()->flash('mensagem_erro', 'Selecione o Certificado!');
-            return redirect()->back();
+            $output = [
+                'success' => 0,
+                'msg' => 'Selecione o Certificado!'
+            ];
+            return redirect()->back()->with('status', $output);
         }
 
         $file = base64_encode(file_get_contents($request->file('file')->path()));
@@ -355,14 +391,26 @@ class NfseConfigController extends Controller
 
             $resp = $certificado->atualiza($payload);
             if ($resp->codigo == 200) {
-                session()->flash('mensagem_sucesso', 'Upload realizado com sucesso!');
+
+                $output = [
+                    'success' => 1,
+                    'msg' => 'Upload realizado com sucesso!'
+                ];
+                return redirect()->back()->with('status', $output);
             } else {
-                session()->flash('mensagem_erro', $resp->mensagem);
+                $output = [
+                    'success' => 0,
+                    'msg' => $resp->mensagem
+                ];
+                return redirect()->back()->with('status', $output);
             }
         } catch (\Exception $e) {
-            session()->flash('mensagem_erro', 'Algo deu errado: ' . $e->getMessage());
+            $output = [
+                'success' => 0,
+                'msg' => 'Algo deu errado: ' . $e->getMessage()
+            ];
+            return redirect()->back()->with('status', $output);
         }
-        return redirect()->back();
     }
 
     public function newToken()
@@ -386,10 +434,25 @@ class NfseConfigController extends Controller
             $emitente = new Emitente($params);
 
             $resp = $emitente->token();
-            dd($resp);
+            if ($resp->codigo == 200) {
+                $output = [
+                    'success' => 1,
+                    'msg' => 'Token gerado com sucesso!'
+                ];
+                return redirect()->back()->with('status', $output);
+            } else {
+                $output = [
+                    'success' => 0,
+                    'msg' => $resp->mensagem
+                ];
+                return redirect()->back()->with('status', $output);
+            }
         } catch (\Exception $e) {
-            session()->flash('mensagem_erro', 'Algo deu errado: ' . $e->getMessage());
+            $output = [
+                'success' => 0,
+                'msg' => 'Algo deu errado: ' . $e->getMessage()
+            ];
+            return redirect()->back()->with('status', $output);
         }
-        return redirect()->back();
     }
 }

@@ -58,8 +58,11 @@ class NfseController extends Controller
 
 
 		if ($config == null) {
-			session()->flash('mensagem_erro', 'Realize a configuração do emitente!');
-			return redirect()->back();
+			$output = [
+				'success' => 0,
+				'msg' => 'Realize a configuração do emitente!'
+			];
+			return redirect()->back()->with('status', $output);
 		}
 
 		$nfses = Nfse::where('empresa_id', $business_id)
@@ -72,7 +75,11 @@ class NfseController extends Controller
 		}
 
 		if (!$config->certificado) {
-			return response()->json('Configure o certificado para consultar', 403);
+			$output = [
+				'success' => 0,
+				'msg' => 'Configure o certificado para consultar'
+			];
+			return redirect()->back()->with('status', $output);
 		}
 
 		$certificado = Business::where('id', $business_id)
@@ -241,12 +248,19 @@ class NfseController extends Controller
 			if ($item) {
 				$item->servico()->delete();
 				$item->delete();
-				session()->flash('mensagem_sucesso', 'Nfse removida!');
+				$output = [
+					'success' => 1,
+					'msg' => 'Nfse removida!'
+				];
+				return redirect()->back()->with('status', $output);
 			}
 		} catch (\Exception $e) {
-			session()->flash('mensagem_erro', 'Algo deu errado!');
+			$output = [
+				'success' => 0,
+				'msg' => 'Algo deu errado: ' . $e->getMessage()
+			];
+			return redirect()->back()->with('status', $output);
 		}
-		return redirect()->back();
 	}
 
 	public function update(Request $request, $id)
@@ -329,13 +343,20 @@ class NfseController extends Controller
 
 				]);
 			});
-			session()->flash('mensagem_sucesso', 'Nfse atualizada!');
+			$output = [
+				'success' => 1,
+				'msg' => 'Nfse atualizada!'
+			];
+			return redirect()->route('nfse.index')->with('status', $output);
 		} catch (\Exception $e) {
 			// echo $e->getLine();
 			// die;
-			session()->flash('mensagem_erro', 'Algo deu errado!');
+			$output = [
+				'success' => 0,
+				'msg' => 'Algo deu errado: ' . $e->getMessage()
+			];
+			return redirect()->route('nfse.index')->with('status', $output);
 		}
-		return redirect('/nfse');
 	}
 
 	public function store(Request $request)
@@ -443,13 +464,18 @@ class NfseController extends Controller
 					$ordem->save();
 				}
 			});
-			session()->flash('mensagem_sucesso', 'Nfse criada');
+			$output = [
+				'success' => 1,
+				'msg' => 'Nfse criada'
+			];
+			return redirect()->route('nfse.index')->with('status', $output);
 		} catch (\Exception $e) {
-			echo $e->getMessage();
-			die;
-			session()->flash('mensagem_erro', 'Algo deu errado!');
+			$output = [
+				'success' => 0,
+				'msg' => 'Algo deu errado: ' . $e->getMessage()
+			];
+			return redirect()->route('nfse.index')->with('status', $output);
 		}
-		return redirect('/nfse');
 	}
 
 	public function storeAjax(Request $request)

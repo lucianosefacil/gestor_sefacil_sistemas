@@ -219,8 +219,11 @@
         <div class="col-sm-6">
           <div class="form-group">
             <label>Token do emitente</label>
-            <input class="form-control" type="text" name="token"
-                   value="{{ $item->token ?? '' }}" @if(!$item) @endif>
+            @if($item->token)
+            <input class="form-control" type="password" name="token" value="{{ $item->token ?? '' }}" @if(!$item) @endif disabled>
+            @else
+            <input class="form-control" type="text" name="token" value="{{ $item->token ?? '' }}">
+            @endif
           </div>
 
           @if(!empty($item) && !empty($item->token))
