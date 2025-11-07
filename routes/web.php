@@ -219,10 +219,10 @@ Route::middleware(['authh', 'auth', 'SetSessionData', 'language', 'timezone', 'A
         Route::get('/clone/{id}', 'NfseController@clone')->name('nfse.clone');
         Route::get('/filtro', 'NfseController@filtro')->name('nfse.filtro');
 
-        Route::post('/enviar', 'NfseIntegraNotasController@enviar')->name('nfse.enviar');
-        Route::post('/consultar', 'NfseIntegraNotasController@consultar')->name('nfse.consultar');
-        Route::post('/cancelar', 'NfseIntegraNotasController@cancelar')->name('nfse.cancelar');
-        Route::get('/preview-xml/{id}', 'NfseIntegraNotasController@previewXml')->name('nfse.preview');
+        Route::post('/enviar', 'NfseController@enviar')->name('nfse.enviar');
+        Route::post('/consultar', 'NfseController@consultar')->name('nfse.consultar');
+        Route::post('/cancelar', 'NfseController@cancelar')->name('nfse.cancelar');
+        Route::get('/preview-xml/{id}', 'NfseController@previewXml')->name('nfse.preview');
 
         Route::get('/baixarXml/{id}', 'NfseController@baixarXml')->name('nfse.baixarXml');
         Route::get('/imprimir/{id}', 'NfseController@imprimir')->name('nfse.imprimir');
