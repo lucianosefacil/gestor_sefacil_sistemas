@@ -239,6 +239,7 @@ Route::middleware(['authh', 'auth', 'SetSessionData', 'language', 'timezone', 'A
         Route::put('/update/{id}', 'NfseConfigController@update')->name('nfse-config.update');
         Route::get('/certificado', 'NfseConfigController@certificado')->name('nfse-config.certificado');
         Route::get('/new-token', 'NfseConfigController@newToken')->name('nfse-config.new-token');
+        Route::post('/upload', 'NfseConfigController@uploadCertificado')->name('nfse-config.upload-certificado');
     });
     
 

@@ -46,21 +46,22 @@ class NfseConfigController extends Controller
 
     private function getCertificado()
     {
-        $item = NfseConfig::where('empresa_id', $this->empresa_id)
+        $business_id = request()->session()->get('user.business_id');
+        $item = NfseConfig::where('empresa_id', $business_id)
             ->first();
+        $empresa = Business::find($business_id);
         $params = [
             'token' => $item->token,
-            'ambiente' => Business::AMBIENTE_PRODUCAO,
+            'ambiente' => $empresa->ambiente,
             'options' => [
                 'debug' => false,
                 'timeout' => 60,
                 'port' => 443,
-                'http_version' => CURL_HTTP_VERSION_NONE
+                'http_version' => ''
             ]
         ];
-        $certificado = new Business($params);
+        $certificado = new Certificado($params);
         $resp = $certificado->mostra();
-
         return $resp;
     }
 
@@ -367,12 +368,14 @@ class NfseConfigController extends Controller
     public function newToken()
     {
         try {
-            $config = ConfigSystem::first();
-            $item = NfseConfig::where('empresa_id', $this->empresa_id)
+            $business_id = request()->session()->get('user.business_id');
+            // $config = ConfigSystem::first();
+            $item = NfseConfig::where('empresa_id', $business_id)
                 ->first();
+            $empresa = Business::find($business_id);
             $params = [
                 'token' => $item->token,
-                'ambiente' => Emitente::AMBIENTE_PRODUCAO,
+                'ambiente' => $empresa->ambiente,
                 'options' => [
                     'debug' => false,
                     'timeout' => 60,

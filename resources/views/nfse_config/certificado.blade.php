@@ -1,5 +1,8 @@
-@extends('default.layout', ['title' => 'Upload de certificado'])
+@extends('layouts.app')
+@section('title', 'Configuração da NFSe')
+
 @section('content')
+
 <style type="text/css">
 	.btn-file {
 		position: relative;
@@ -23,6 +26,16 @@
 	}
 </style>
 
+
+
+<section class="content-header">
+  <h1>NFSe
+    <small>Configuração</small>
+  </h1>
+</section>
+
+<section class="content">
+  @component('components.widget', ['class' => 'box-primary', 'title' => 'NFSe Lista'])
 <div class=" d-flex flex-column flex-column-fluid" id="kt_content">
 	<div class="card card-custom gutter-b example example-compact">
 		<div class="container @if(env('ANIMACAO')) animate__animated @endif animate__backInLeft">
@@ -110,5 +123,14 @@
 		</div>
 	</div>
 </div>
+    
+  @endcomponent
+</section>
 
+@endsection
+
+@section('javascript')
+<script>
+ 
+</script>
 @endsection
