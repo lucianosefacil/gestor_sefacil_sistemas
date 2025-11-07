@@ -542,6 +542,7 @@ class ModuleUtil extends Util
             'revenues' => ['name' => 'Contas a receber'],
             'cte' => ['name' => 'CTe'],
             'mdfe' => ['name' => 'MDFe'],
+            'nfse' => ['name' => 'NFSe'],
             'nuvemshop' => ['name' => 'Nuvem Shop'],
             // 'ecommerce' => ['name' => 'Ecommerce'],
             'account' => ['name' => __('lang_v1.account')],

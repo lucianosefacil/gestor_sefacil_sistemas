@@ -625,6 +625,37 @@ class AdminSidebarMenu
                 )->order(33);
             }
 
+             if (in_array('nfse', $enabled_modules) && auth()->user()->can('nfse.view')) {
+                $menu->dropdown(
+                    'NFSe',
+                    function ($sub) {
+                        $sub->url(
+                            action('NfseController@index'),
+                            'Lista  ',
+                            ['icon' => 'fa fas fa-list', 'active' => request()->segment(1) == 'nfse' && request()->segment(2) == null]
+                        );
+                        $sub->url(
+                            action('NfseController@create'),
+                            'Adicionar',
+                            ['icon' => 'fa fas fa-plus-circle', 'active' => request()->segment(1) == 'nfse' && request()->segment(2) == 'create']
+                        );
+
+                        // $sub->url(
+                        //     action('VeiculoController@index'),
+                        //     'Veiculos',
+                        //     ['icon' => 'fa fas fa-truck', 'active' => request()->segment(1) == 'veiculos' && request()->segment(2) == null]
+                        // );
+
+                        $sub->url(
+                            action('NfseConfigController@index'),
+                            'Configuração',
+                            ['icon' => 'fa fas fa-tasks', 'active' => request()->segment(1) == 'nfse-config' && request()->segment(2) == 'nfse-config']
+                        );
+                    },
+                    ['icon' => 'fa fas fa-file-invoice']
+                )->order(34);
+            }
+
             if (in_array('stock_transfers', $enabled_modules) && (auth()->user()->can('purchase.view') || auth()->user()->can('purchase.create'))) {
                 $menu->dropdown(
                     __('lang_v1.stock_transfers'),
