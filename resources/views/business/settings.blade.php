@@ -25,6 +25,7 @@
                         <a href="#" class="list-group-item text-center">@lang('business.product')</a>
                         <a href="#" class="list-group-item text-center">@lang('business.sale')</a>
                         <a href="#" class="list-group-item text-center">PDV</a>
+                        <a href="#" class="list-group-item text-center">NFSe</a>
                         <a href="#" class="list-group-item text-center">@lang('purchase.purchases')</a>
                         <a href="#" class="list-group-item text-center">Outros</a>
                         <a href="#" class="list-group-item text-center">Sistema</a>
@@ -49,8 +50,9 @@
                     <!-- tab 4 start -->
                     @include('business.partials.settings_sales')
                     @include('business.partials.settings_pos')
-                    <!-- tab 4 end -->
-                    <!-- tab 5 start -->
+
+                    @include('business.partials.settings_nfse')
+
                     @include('business.partials.settings_purchase')
                     <!-- tab 5 end -->
                     <!-- tab 6 start -->
