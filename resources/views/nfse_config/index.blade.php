@@ -219,7 +219,7 @@
         <div class="col-sm-6">
           <div class="form-group">
             <label>Token do emitente</label>
-            @if($item->token)
+            @if(isset($item) && $item->token)
             <input class="form-control" type="password" name="token" value="{{ $item->token ?? '' }}" @if(!$item) @endif disabled>
             @else
             <input class="form-control" type="text" name="token" value="{{ $item->token ?? '' }}">
