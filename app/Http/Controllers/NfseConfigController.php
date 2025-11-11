@@ -357,6 +357,8 @@ class NfseConfigController extends Controller
         //     mkdir(public_path('certificado_temp'), 0777, true);
         // }
 
+        $business_id = request()->session()->get('user.business_id');
+
         if (!$request->hasFile('file')) {
             $output = [
                 'success' => 0,
@@ -369,12 +371,13 @@ class NfseConfigController extends Controller
         // dd($file);
         $senha = $request->senha;
         try {
-            $config = Business::first();
-            $item = NfseConfig::where('empresa_id', $this->empresa_id)
+            // $config = Business::first();
+            $empresa = Business::find($business_id);
+            $item = NfseConfig::where('empresa_id', $business_id)
                 ->first();
             $params = [
                 'token' => $item->token,
-                'ambiente' => 2,
+                'ambiente' => $empresa->ambiente,
                 'options' => [
                     'debug' => false,
                     'timeout' => 60,
