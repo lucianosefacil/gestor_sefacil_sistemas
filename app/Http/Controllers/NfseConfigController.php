@@ -394,7 +394,6 @@ class NfseConfigController extends Controller
 
             $resp = $certificado->atualiza($payload);
             if ($resp->codigo == 200) {
-
                 $output = [
                     'success' => 1,
                     'msg' => 'Upload realizado com sucesso!'

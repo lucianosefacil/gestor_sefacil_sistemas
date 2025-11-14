@@ -942,13 +942,17 @@ class NFeService
 
 		// Gera tagfat e tagdup somente se NÃO for pagamento à vista
 		if (!$pagamento_a_vista) {
+
+			$valorNF = ($somaProdutos - $totalDesconto) + $venda->valor_frete;
+
 			$stdFat = new \stdClass();
 			$stdFat->nFat = (int)$lastNumero + 1;
-			$stdFat->vOrig = $this->format($somaProdutos);
+			$stdFat->vOrig = $this->format($somaProdutos + $venda->valor_frete);
+
 			if ($totalDesconto > 0) {
 				$stdFat->vDesc = $this->format($totalDesconto);
 			}
-			$stdFat->vLiq = $this->format($somaProdutos - $totalDesconto);
+			$stdFat->vLiq = $this->format($valorNF);
 			$nfe->tagfat($stdFat);
 
 			if (!$venda->natureza->bonificacao) {
@@ -980,7 +984,7 @@ class NFeService
 		if ($tipoPagamento == '99') {
 			$stdDetPag->xPag = "Multiplo pagamento";
 		}
-		$stdDetPag->vPag = $this->format($somaProdutos - $totalDesconto);
+		$stdDetPag->vPag = $this->format($valorNF);
 		// Informações adicionais para cartão de crédito/débito
 		if (in_array($tipoPagamento, ['03', '04'])) {
 			$stdDetPag->tpIntegra = 2;
