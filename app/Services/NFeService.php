@@ -940,10 +940,10 @@ class NFeService
 			$tipoPagamento = '20'; // Corrige para SEFAZ
 		}
 
+		$valorNF = ($somaProdutos - $totalDesconto) + $venda->valor_frete;
+
 		// Gera tagfat e tagdup somente se NÃO for pagamento à vista
 		if (!$pagamento_a_vista) {
-
-			$valorNF = ($somaProdutos - $totalDesconto) + $venda->valor_frete;
 
 			$stdFat = new \stdClass();
 			$stdFat->nFat = (int)$lastNumero + 1;
