@@ -124,6 +124,8 @@ class ProductController extends Controller
                 'products.enable_stock',
                 'products.is_inactive',
                 'products.not_for_selling',
+                'products.product_custom_field1',
+                'products.product_custom_field2',
                 'products.product_custom_field3',
                 'products.product_custom_field4',
                 DB::raw('SUM(vld.qty_available) as current_stock'),

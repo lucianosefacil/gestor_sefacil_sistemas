@@ -55,7 +55,7 @@
                     -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
                 </div>
                 <div class="col s12" style="margin-top:-5px">
-                    <label style="color: black">PLACA DO VEÍCULO: <strong>{{$ordem->veiculo ? $ordem->veiculo->placa : '--'}}</strong> -- </label>
+                    <label style="color: black">{{$config->nome_ordem_servico}}: <strong>{{$ordem->veiculo ? $ordem->veiculo->placa : '--'}}</strong> -- </label>
                     <label style="color: black">MARCA: <strong>{{$ordem->veiculo ? $ordem->veiculo->marca : '--'}}</strong> -- </label>
                     <label style="color: black">MODELO: <strong>{{$ordem->veiculo ? $ordem->veiculo->modelo : '--'}}</strong> -- </label>
                 </div>
@@ -118,10 +118,9 @@
                             @endforeach
                         </tbody>
                     </table>
-                    <label style="color: black; magin-top:-10px" for="">TOTAL PEÇAS: {{number_format($somaItens, 2, ',', '.')}}</label>
                 </div>
                 
-                ------------------------------------------------------------------------------------------------------------------------------------------------------------
+                -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
                 <div class="col s12" style="margin-top:0px">
                     <table>
@@ -153,10 +152,12 @@
                             @endforeach
                         </tbody>
                     </table>
-                    <label style="color: black; magin-top:-15px" for="">TOTAL SERVIÇOS: {{number_format($somaServicos, 2, ',', '.')}}</label>
                 </div>
-                ---------------------------------------------------------------------------------------------------------------------------------------------------------
+                -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
                 <div class="col s12 right-align">
+                    <label style="color: black; magin-top:-10px" for="">TOTAL PEÇAS: {{number_format($somaItens, 2, ',', '.')}}</label><br>
+                    <label style="color: black; magin-top:-15px" for="">TOTAL SERVIÇOS: {{number_format($somaServicos, 2, ',', '.')}}</label><br>
+
                     <label style="color: black" class=""><strong>Valor Total da OS:</strong>
                         {{number_format($ordem->valor,2 ,',', '.')}}
                     </label>

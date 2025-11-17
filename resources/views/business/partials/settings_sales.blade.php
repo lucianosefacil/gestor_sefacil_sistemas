@@ -76,6 +76,13 @@
             </div>
         </div>
 
+        <div class="col-sm-4">
+            <div class="form-group">
+                {!! Form::label('nome_ordem_servico', __('Nome a exibir na Ordem de Serviço') . ':') !!}
+                {!! Form::text('nome_ordem_servico', $business->nome_ordem_servico, ['class' => 'form-control', 'placeholder' => __('Nome a exibir na Ordem de Serviço')]); !!}
+            </div>
+        </div>
+
         <div class="col-sm-8">
             <div class="form-group">
                 <div class="checkbox">
