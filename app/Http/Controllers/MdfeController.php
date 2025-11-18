@@ -1099,7 +1099,7 @@ class MdfeController extends Controller
 
 			try {
 				$damdfe = new Damdfe($xml, $mdfe);
-				$damdfe->debugMode(true);
+				$damdfe->debugMode(false);
 				$damdfe->creditsIntegratorFooter('WEBNFe Sistemas - http://www.webenf.com.br');
 				$pdf = $damdfe->render($logo);
 				header('Content-Type: application/pdf');
