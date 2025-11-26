@@ -971,7 +971,7 @@ class NFeService
 					$stdDup = new \stdClass();
 					$stdDup->nDup = '001';
 					$stdDup->dVenc = $pay->vencimento ?? date('Y-m-d');
-					$stdDup->vDup = $this->format($somaProdutos - $totalDesconto);
+					$stdDup->vDup = $this->format($valorNF);
 					$nfe->tagdup($stdDup);
 				}
 			}
