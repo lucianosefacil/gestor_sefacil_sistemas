@@ -927,6 +927,7 @@ class NFeService
 
 		$pagamento_a_vista = in_array($tipoPagamento, [
 			'01', // Dinheiro
+			'03',
 			'04', // Cartão de débito
 			'10', // Vale alimentação
 			'11', // Vale refeição
