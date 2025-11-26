@@ -750,25 +750,17 @@
 
 
                     findCidade(data.estabelecimento.cidade.nome, (cidade) => {
-
                         if (cidade) {
-
                             var $option = $("<option selected></option>").val(data.estabelecimento
                                 .cidade.id).text(data.estabelecimento.cidade.nome + " (" + data
                                 .estabelecimento.estado.sigla + ")");
-
                             $('#cidade').append($option).trigger('change');
                             $('#cidade').val(data.estabelecimento.cidade.id).change();
-
                             $('#cidade_entrega').val(data.estabelecimento.cidade.id).change();
                             $('#cidade_entrega').append($option).trigger('change');
-
-
-
                             //PUXAR A UF APOS O CAMPO CNPJ
                             var $optionUF = $("<option selected></option>").val(data.estabelecimento
                                 .cidade.id).text(data.estabelecimento.estado.sigla);
-
                             $('#uf2').append($optionUF).trigger('change');
                             $('#uf2').val(data.estabelecimento.estado.sigla).change();
                             //FIM PUXAR UF APOS O CNPJ
@@ -788,11 +780,12 @@
     }
 
 
-    function findCidade(nomeCidade, call) {
+    function findCidade(nomeCidade, uf, ibge, call) {
         var path = window.location.protocol + '//' + window.location.host
-
         $.get('{{ route('nfe.findCidade') }}', {
-                nome: nomeCidade
+                nome: nomeCidade,
+                uf: uf,
+                ibge: ibge
             })
             .done((success) => {
                 call(success)
@@ -801,7 +794,6 @@
                 call(err)
             })
     }
-
 
 
 
@@ -837,16 +829,18 @@
 
 
      function buscacep(cep) {
+        console.log(cep)
         cep = cep.replace("-", "").replace(/\D/g, '');
 
         $.get('/buscar-cep', { cep: cep })
             .done((response) => {
+                console.log(response);
                 $('#bairro').val(response.bairro);
                 $('#bairro_entrega').val(response.bairro);
                 $('#rua').val(response.logradouro);
                 $('#rua_entrega').val(response.logradouro);
 
-                findCidade(response.localidade, (res) => {
+                findCidade(response.localidade, response.uf, response.ibge, (res) => {
                     if (res) {
                         var $option = $("<option selected></option>").val(res.id).text(res.nome + " (" + res.uf + ")");
                         $('#cidade').append($option).trigger('change');
@@ -861,6 +855,8 @@
     }
 
     $('#cep').on('blur', function () {
+        const clean = this.value.replace(/\D/g, '');
+        if (clean.length < 8) return;
         buscacep(this.value);
     });
 

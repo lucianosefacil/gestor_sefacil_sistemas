@@ -258,10 +258,6 @@ class NfeController extends Controller
 				// devolva o MESMO status que veio do service (400/422/500...)
 				// isso faz o jQuery cair no callback "error" do AJAX
 				return $resultado;
-
-
-
-
 			} else {
 				return response()->json($nfe['xml_erros'][0], 407);
 			}
@@ -879,7 +875,11 @@ class NfeController extends Controller
 
 	public function findCidade(Request $request)
 	{
-		$cidade = City::where('nome', $request->nome)
+		// $cidade = City::where('nome', $request->nome)
+		// 	->first();
+		$cidade = City::when($request->ibge, fn($q) => $q->where('codigo', $request->ibge))
+			->when($request->uf, fn($q) => $q->where('uf', $request->uf))
+			->when($request->nome, fn($q) => $q->where('nome', $request->nome))
 			->first();
 
 		return response()->json($cidade);
