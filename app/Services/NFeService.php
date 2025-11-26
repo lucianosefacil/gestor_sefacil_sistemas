@@ -927,6 +927,7 @@ class NFeService
 
 		$pagamento_a_vista = in_array($tipoPagamento, [
 			'01', // Dinheiro
+			'03',
 			'04', // Cartão de débito
 			'10', // Vale alimentação
 			'11', // Vale refeição
@@ -970,7 +971,7 @@ class NFeService
 					$pay = $venda->payment_lines[0];
 					$stdDup = new \stdClass();
 					$stdDup->nDup = '001';
-					$stdDup->dVenc = $pay->vencimento ?? date('Y-m-d');
+					$stdDup->dVenc = $pay->vencimento ?? date('Y-m-d', strtotime('+1 day'));
 					$stdDup->vDup = $this->format($valorNF);
 					$nfe->tagdup($stdDup);
 				}
