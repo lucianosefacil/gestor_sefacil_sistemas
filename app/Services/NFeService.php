@@ -971,7 +971,7 @@ class NFeService
 					$pay = $venda->payment_lines[0];
 					$stdDup = new \stdClass();
 					$stdDup->nDup = '001';
-					$stdDup->dVenc = $pay->vencimento ?? date('Y-m-d', strtotime('+1 day'));
+					$stdDup->dVenc = $pay->vencimento ?? date('Y-m-d');
 					$stdDup->vDup = $this->format($valorNF);
 					$nfe->tagdup($stdDup);
 				}
