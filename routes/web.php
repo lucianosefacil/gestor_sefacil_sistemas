@@ -231,6 +231,9 @@ Route::middleware(['authh', 'auth', 'SetSessionData', 'language', 'timezone', 'A
         Route::get('/{id}/imprimir-cancelamento', 'NfseController@imprimirCancelamento')->name('nfse.imprimir_cancelamento');
         Route::get('/{id}/cancelamento/pdf', 'NfseController@imprimirCancelamento')->name('nfse.imprimir_cancelamento');
         Route::get('/{id}/cancelamento/xml', 'NfseController@baixarXmlCancelado')->name('nfse.baixarXmlCancelado');
+
+        Route::get('/{id}/substituicao', 'NfseController@substituicaoForm')->name('nfse.substituicao.form');
+        Route::post('/{id}/salvar-substituicao', 'NfseController@substituirSalvar')->name('nfse.substituir.salvar');
     });
 
     Route::group(['prefix' => '/nfse-config'], function () {

@@ -60,6 +60,7 @@
             <th>Tomador</th>
             <th>Número</th>
             <th>Estado</th>
+            <th>Substituída</th>
             <th>Valor Serviço</th>
             <th>Ações</th>
           </tr>
@@ -71,6 +72,25 @@
               <td>{{ $n->razao_social }}</td>
               <td>{{ $n->numero_nfse > 0 ? $n->numero_nfse : '-' }}</td>
               <td>{{ ucfirst($n->estado) }}</td>
+              <td>
+                @if(!empty($n->substituicao_de_id))
+                  <span class="badge badge-info">
+                    Substitui NFSe {{ $nfseNumeros[$n->substituicao_por_id] ?? $n->substituicao_por_id }}
+                  </span>
+                  {{-- @if($n->estado !== 'aprovado')
+                    <span class="badge badge-warning">Aguardando aprovação</span>
+                  @endif --}}
+                @elseif(!empty($n->substituicao_por_id))
+                  <span class="badge badge-secondary">
+                    Substituída
+                  </span>
+                  {{-- @if($n->estado !== 'cancelado')
+                    <span class="badge badge-warning">Será cancelada quando a nova aprovar</span>
+                  @endif --}}
+                @else
+                  <span class="text-muted">—</span>
+                @endif
+              </td>
               <td>{{ number_format($n->valor_total, 2, ',', '.') }}</td>
               <td>
                 @if($n->estado == 'novo' || $n->estado == 'rejeitado')
@@ -98,6 +118,12 @@
                 <button title="Cancelar NFSe" class="btn btn-danger btn-sm" onclick="openCancelarModal({{ $n->id }}, '{{ $n->numero_nfse }}')">
                   <i class="fa fa-times"></i>
                 </button>
+
+                <a title="Substituir NFSe"
+                  class="btn btn-warning btn-sm"
+                  href="{{ route('nfse.substituicao.form', $n->id) }}">
+                  <i class="fa fa-recycle"></i>
+                </a>
 
 								@else
 								<a target="_blank" title="Visualizar temporário" class="btn btn-info btn-sm" href="/nfse/preview-xml/{{$n->id}}">

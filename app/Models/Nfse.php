@@ -47,12 +47,17 @@ class Nfse extends Model
         'cancelamento_xml_path',
         'cancelamento_pdf_path',
         'cancelamento_log_path',
+
+        'motivo_substituicao',
+        'substituicao_de_id',
+        'substituicao_por_id',
+        'chave_referenciada',
     ];
 
     protected $casts = [
         'valor_total'             => 'decimal:7',
         'cancelado_em'            => 'datetime',
-        'cancelamento_data_evento'=> 'datetime',
+        'cancelamento_data_evento' => 'datetime',
         'created_at'              => 'datetime',
         'updated_at'              => 'datetime',
     ];
@@ -100,5 +105,20 @@ class Nfse extends Model
             6 => 'Exigibilidade Suspensa por Decisão Judicial',
             7 => 'Exigibilidade Suspensa por Processo Administrativo',
         ];
+    }
+
+    public function substituicaoOrigem()
+    {
+        return $this->belongsTo(self::class, 'substituicao_de_id');
+    }
+
+    public function substituicaoAtual()
+    {
+        return $this->hasOne(self::class, 'substituicao_de_id');
+    }
+
+    public function substituicaoNova()
+    {
+        return $this->belongsTo(self::class, 'substituicao_por_id');
     }
 }
