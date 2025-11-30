@@ -373,7 +373,7 @@
             Voltar
           </a>
           <button type="submit" class="btn btn-primary">
-            Salvar e substituir NFSe
+            Salvar NFSe
           </button>
         </div>
       </div>

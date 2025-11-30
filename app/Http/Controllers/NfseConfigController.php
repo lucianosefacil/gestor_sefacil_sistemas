@@ -95,16 +95,19 @@ class NfseConfigController extends Controller
             return redirect('/configNF')->with('status', $output);
         }
         $tokenNfse = $configNota->token_nfse;
+        // dd($item);
         return view('nfse_config.index', compact('item', 'cidades', 'tokenNfse', 'business_id'));
     }
 
     public function store(Request $request)
     {
+        // dd($request->all());
         try {
             $business_id = request()->session()->get('user.business_id');
-            $item = NfseConfig::create($request->all());
             $resp = $this->storeSofthouse($request);
+            // dd($resp);
             if ($resp->codigo == 200) {
+                $item = NfseConfig::create($request->all());
                 $item->token = $resp->token;
                 $item->save();
                 $configNota = Business::where('id', $business_id)
@@ -136,11 +139,9 @@ class NfseConfigController extends Controller
     private function storeSofthouse($request)
     {
         try {
-            $config = Business::first();
-
             $params = [
-                'token' => $config->token_integra_notas,
-                'ambiente' => 2,
+                'token' => env('TOKEN_INTEGRA') ,
+                'ambiente' => 1,
                 'options' => [
                     'debug' => false,
                     'timeout' => 60,
@@ -200,6 +201,7 @@ class NfseConfigController extends Controller
 
     public function update(Request $request, $id)
     {
+        // dd($request->all());
         try {
             $item = NfseConfig::findOrFail($id);
             if ($request->hasFile('file')) {
@@ -306,12 +308,12 @@ class NfseConfigController extends Controller
             }
             // dd($payload);
             $resp = $softhouse->atualiza($payload);
-
+            // dd($resp);
             return $resp;
         } catch (\Exception $e) {
             $output = [
                 'success' => 0,
-                'msg' => 'Algo deu errado: ' . $e->getMessage()
+                'msg' => 'Algo deu errado: ' . $e->getLine() . ' - ' . $e->getMessage()
             ];
             return redirect()->back()->with('status', $output);
         }

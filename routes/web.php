@@ -220,6 +220,7 @@ Route::middleware(['authh', 'auth', 'SetSessionData', 'language', 'timezone', 'A
         Route::get('/filtro', 'NfseController@filtro')->name('nfse.filtro');
 
         Route::post('/enviar', 'NfseController@enviar')->name('nfse.enviar');
+        Route::post('/enviar-substituicao', 'NfseController@enviarSubstituicao')->name('nfse.enviar.substituicao');
         Route::post('/consultar', 'NfseController@consultar')->name('nfse.consultar');
         Route::post('/cancelar', 'NfseController@cancelar')->name('nfse.cancelar');
         Route::get('/preview-xml/{id}', 'NfseController@previewXml')->name('nfse.preview');
@@ -473,6 +474,7 @@ Route::middleware(['authh', 'auth', 'SetSessionData', 'language', 'timezone', 'A
     Route::get('/contacts/validaCnpjCadastrado', 'ContactController@validaCnpjCadastrado')->name('contacts.valida-cnpj');
     Route::get('/buscar-cep', 'ContactController@buscarCep');
     Route::get('/contacts/customer/{id}', 'ContactController@getCustomerDetails')->name('contacts.customer-details');
+    Route::get('/contacts/buscar-cnpj/{cnpj}', 'ContactController@buscarCnpj')->name('contacts.buscar-cnpj');
 
     Route::resource('contacts', 'ContactController');
 

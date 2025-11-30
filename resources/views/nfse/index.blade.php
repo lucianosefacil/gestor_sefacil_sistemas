@@ -73,19 +73,21 @@
               <td>{{ $n->numero_nfse > 0 ? $n->numero_nfse : '-' }}</td>
               <td>{{ ucfirst($n->estado) }}</td>
               <td>
-                @if(!empty($n->substituicao_de_id))
+                @if($n->substituicao_de_id)
                   <span class="badge badge-info">
-                    Substitui NFSe {{ $nfseNumeros[$n->substituicao_por_id] ?? $n->substituicao_por_id }}
+                    Substitui NFSe {{ $nfseNumeros[$n->substituicao_de_id] ?? $n->substituicao_de_id }}
                   </span>
+              
                   {{-- @if($n->estado !== 'aprovado')
                     <span class="badge badge-warning">Aguardando aprovação</span>
                   @endif --}}
-                @elseif(!empty($n->substituicao_por_id))
+                @elseif($n->substituicao_por_id)
                   <span class="badge badge-secondary">
                     Substituída
                   </span>
+              
                   {{-- @if($n->estado !== 'cancelado')
-                    <span class="badge badge-warning">Será cancelada quando a nova aprovar</span>
+                    <span class="badge badge-warning">Cancelamento pendente</span>
                   @endif --}}
                 @else
                   <span class="text-muted">—</span>
@@ -100,10 +102,23 @@
                 <a title="Editar" class="btn btn-warning btn-sm" onclick='swal("Atenção!", "Deseja editar este registro?", "warning").then((sim) => {if(sim){ location.href="/nfse/edit/{{ $n->id }}" }else{return false} })' href="#!">
 								  <i class="fa fa-edit"></i>	
 								</a>
-								<button type="button" onclick="transmitir('{{ $n->id }}')" title="Transmitir NFSe" class="btn btn-success btn-sm" >
-								  <i class="fa fa-paper-plane"></i>
-								</button>
+
+								{{-- <button type="button" 
+                  onclick="transmitir('{{ $n->id }}', {{ $n->substituicao_de_id ? 'true' : 'false' }})" 
+                  class="btn btn-{{ $n->substituicao_de_id ? 'success' : 'success' }} btn-sm">
+								  <i class="fa fa-{{ $n->substituicao_de_id ? 'recycle' : 'paper-plane' }}" title="{{ $n->substituicao_de_id ? 'Transmitir' : 'Substituir' }}"></i>
+								</button> --}}
+
+                <button type="button" 
+                  onclick="transmitir('{{ $n->id }}', {{ $n->substituicao_de_id ? 'true' : 'false' }})" 
+                  title="{{ $n->substituicao_de_id ? 'Transmitir NFSe Substituta' : 'Transmitir NFSe' }}"
+                  class="btn btn-success btn-sm">
+                  <i class="fa fa-{{ $n->substituicao_de_id ? 'recycle' : 'paper-plane' }}"></i>
+                  {{-- {{ $n->substituicao_de_id ? 'Substituir' : 'Transmitir' }} --}}
+                </button>
+
 								@endif
+
 								@if($n->estado == 'aprovado')
 								<a title="Baixar XML" target="_blank" href="/nfse/baixarXml/{{$n->id}}" class="btn btn-light btn-sm">
 								  <i class="fa fa-download"></i>
@@ -169,7 +184,7 @@
                 <select class="form-control custom-select" id="motivo">
                   <option value="1">Erro na emissão</option>
                   <option value="2">Serviço não prestado</option>
-                  <option value="4">Duplicidade de nota</option>
+                  <option value="3">Duplicidade de nota</option>
                 </select>
               </div>
             </div>
@@ -189,23 +204,32 @@
 <script>
 
 
-function transmitir(id) {
+function transmitir(id, ehSubstituicao = false) {
+  const titulo = ehSubstituicao ? "Confirmar Substituição" : "Confirmar Transmissão";
+  const texto = ehSubstituicao 
+    ? "Esta NFSe será transmitida e substituirá automaticamente a NFSe antiga. Deseja continuar?" 
+    : "Deseja transmitir esta NFSe?";
+  const btnTexto = ehSubstituicao ? "Sim, substituir!" : "Sim, transmitir!";
+  
   swal({
-    title: "Confirmar Transmissão",
-    text: "Deseja transmitir esta NFSe?",
+    title: titulo,
+    text: texto,
     type: "warning",
     showCancelButton: true,
-    confirmButtonColor: "#28a745",
+    confirmButtonColor: ehSubstituicao ? "#f39c12" : "#28a745",
     cancelButtonColor: "#6c757d",
-    confirmButtonText: "Sim, transmitir!",
+    confirmButtonText: btnTexto,
     cancelButtonText: "Cancelar"
   }).then((result) => {
     if (!result) return;
 
-    swal({ title: "Transmitindo...", text: "Aguarde...", type: "info", showConfirmButton: false, allowOutsideClick: false });
+    const tituloProcessando = ehSubstituicao ? "Processando substituição..." : "Transmitindo...";
+    swal({ title: tituloProcessando, text: "Aguarde...", type: "info", showConfirmButton: false, allowOutsideClick: false });
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-    fetch('/nfse/enviar', {
+    const url = ehSubstituicao ? '/nfse/enviar-substituicao' : '/nfse/enviar';
+    
+    fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken },
       body: JSON.stringify({ id })
@@ -214,7 +238,15 @@ function transmitir(id) {
     .then(({ ok, status, data }) => {
       // Integra Notas: sucesso(bool), codigo(int), mensagem(string)
       if (ok && (data.sucesso || status === 200)) {
-        swal({ title: "Sucesso!", text: "NFSe transmitida.", type: "success" }).then(() => location.reload());
+        if (ehSubstituicao && data.nfse_nova && data.nfse_antiga) {
+          swal({ 
+            title: "Substituição concluída!", 
+            html: `Nova NFSe: <strong>${data.nfse_nova}</strong><br>NFSe substituída: <strong>${data.nfse_antiga}</strong>`,
+            type: "success" 
+          }).then(() => location.reload());
+        } else {
+          swal({ title: "Sucesso!", text: data.mensagem || "NFSe transmitida.", type: "success" }).then(() => location.reload());
+        }
         return;
       }
       if (status === 202 || data.codigo === 5023) {
@@ -222,7 +254,7 @@ function transmitir(id) {
         return;
       }
       const msg = data.mensagem || data.erros || JSON.stringify(data);
-      swal({ title: "Erro na Transmissão", text: String(msg), type: "error" });
+      swal({ title: ehSubstituicao ? "Erro na Substituição" : "Erro na Transmissão", text: String(msg), type: "error" });
     })
     .catch((e) => swal({ title: "Erro", text: e.message, type: "error" }));
   });

@@ -705,12 +705,14 @@
             $("#contribuinte").val(1).change(); //SIM
         }
         cpf_cnpj = cpf_cnpj.replace(/[^0-9]/g, '')
+        var url = '{{ url("contacts/buscar-cnpj") }}/' + cpf_cnpj;  // ← CORREÇÃO AQUI
+
         $.ajax({
             type: 'GET',
-            url: 'https://publica.cnpj.ws/cnpj/' + cpf_cnpj,
-
+            url: url,
             dataType: 'json',
             success: function(data) {
+                console.log(data);
                 if (data != null) {
                     $('#ie_rg').val(data.estabelecimento.inscricoes_estaduais[0].inscricao_estadual)
                     $('#name').val(data.razao_social)
@@ -749,23 +751,42 @@
 
 
 
-                    findCidade(data.estabelecimento.cidade.nome, (cidade) => {
-                        if (cidade) {
-                            var $option = $("<option selected></option>").val(data.estabelecimento
-                                .cidade.id).text(data.estabelecimento.cidade.nome + " (" + data
-                                .estabelecimento.estado.sigla + ")");
-                            $('#cidade').append($option).trigger('change');
-                            $('#cidade').val(data.estabelecimento.cidade.id).change();
-                            $('#cidade_entrega').val(data.estabelecimento.cidade.id).change();
-                            $('#cidade_entrega').append($option).trigger('change');
-                            //PUXAR A UF APOS O CAMPO CNPJ
-                            var $optionUF = $("<option selected></option>").val(data.estabelecimento
-                                .cidade.id).text(data.estabelecimento.estado.sigla);
-                            $('#uf2').append($optionUF).trigger('change');
-                            $('#uf2').val(data.estabelecimento.estado.sigla).change();
-                            //FIM PUXAR UF APOS O CNPJ
+                    // findCidade(data.estabelecimento.cidade.nome, (cidade) => {
+                    //     if (cidade) {
+                    //         var $option = $("<option selected></option>").val(data.estabelecimento
+                    //             .cidade.id).text(data.estabelecimento.cidade.nome + " (" + data
+                    //             .estabelecimento.estado.sigla + ")");
+                    //         $('#cidade').append($option).trigger('change');
+                    //         $('#cidade').val(data.estabelecimento.cidade.id).change();
+                    //         $('#cidade_entrega').val(data.estabelecimento.cidade.id).change();
+                    //         $('#cidade_entrega').append($option).trigger('change');
+                    //         //PUXAR A UF APOS O CAMPO CNPJ
+                    //         var $optionUF = $("<option selected></option>").val(data.estabelecimento
+                    //             .cidade.id).text(data.estabelecimento.estado.sigla);
+                    //         $('#uf2').append($optionUF).trigger('change');
+                    //         $('#uf2').val(data.estabelecimento.estado.sigla).change();
+                    //         //FIM PUXAR UF APOS O CNPJ
+                    //     }
+                    // })
+
+                    findCidade(
+                        data.estabelecimento.cidade.nome,
+                        data.estabelecimento.estado.sigla,
+                        data.estabelecimento.cidade.ibge_id,
+                        (cidade) => {
+                            if (!cidade || !cidade.id) return;
+                            const textoCidade = cidade.nome + ' (' + cidade.uf + ')';
+                            const optionCidade = $('<option selected></option>').val(cidade.id).text(textoCidade);
+                            $('#cidade').append(optionCidade.clone()).trigger('change');
+                            $('#cidade').val(cidade.id).trigger('change');
+
+                            $('#cidade_entrega').append(optionCidade.clone()).trigger('change');
+                            $('#cidade_entrega').val(cidade.id).trigger('change');
+
+                            $('#uf2').val(cidade.uf).trigger('change'); // mantém o combo de UF sincronizado
                         }
-                    })
+                    );
+
 
                 } else {
                     swal('Algo deu errado', data.status, 'warning')
