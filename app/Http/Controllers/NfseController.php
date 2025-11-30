@@ -1442,25 +1442,25 @@ class NfseController extends Controller
 		});
 
 		$envioRequest = new Request(['id' => $nfseNova->id]);
-		// $envioResp    = $this->enviar($envioRequest);
+		$envioResp    = $this->enviar($envioRequest);
 
-		// if ($envioResp->getStatusCode() !== 200) {
-		// 	return back()
-		// 		->withErrors(['transmissao' => $envioResp->getData()])
-		// 		->withInput();
-		// }
+		if ($envioResp->getStatusCode() !== 200) {
+			return back()
+				->withErrors(['transmissao' => $envioResp->getData()])
+				->withInput();
+		}
 
-		// $subResp = $this->substituir(new Request([
-		// 	'id_antiga'     => $nfseAntiga->id,
-		// 	'id_nova'       => $nfseNova->id,
-		// 	'justificativa' => $request->justificativa_substituicao,
-		// ]));
+		$subResp = $this->substituir(new Request([
+			'id_antiga'     => $nfseAntiga->id,
+			'id_nova'       => $nfseNova->id,
+			'justificativa' => $request->justificativa_substituicao,
+		]));
 
-		// if ($subResp->getStatusCode() !== 200) {
-		// 	return back()
-		// 		->withErrors(['substituicao' => $subResp->getData()])
-		// 		->withInput();
-		// }
+		if ($subResp->getStatusCode() !== 200) {
+			return back()
+				->withErrors(['substituicao' => $subResp->getData()])
+				->withInput();
+		}
 
 		return redirect()->route('nfse.index')->with('status', [
 			'success' => 1,
