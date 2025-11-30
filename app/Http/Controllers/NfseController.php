@@ -699,32 +699,36 @@ class NfseController extends Controller
 	}
 
 	public function enviar(Request $request)
-    {
-        $business_id = request()->session()->get('user.business_id');
-        $empresa = Business::where('id', $business_id)->first();
-        $token = NfseConfig::where('empresa_id', $business_id)->first();
+	{
+		$business_id = request()->session()->get('user.business_id');
+		$empresa = Business::where('id', $business_id)->first();
+		$token = NfseConfig::where('empresa_id', $business_id)->first();
 
 
-        $item = Nfse::findOrFail($request->id);
-        if ($item->estado === 'aprovado') return response()->json('Este documento esta aprovado', 401);
-        if ($item->estado === 'cancelado') return response()->json('Este documento esta cancelado', 401);
+		$item = Nfse::findOrFail($request->id);
+		if ($item->estado === 'aprovado') return response()->json('Este documento esta aprovado', 401);
+		if ($item->estado === 'cancelado') return response()->json('Este documento esta cancelado', 401);
 
-        if (!is_dir(public_path('nfse_doc'))) @mkdir(public_path('nfse_doc'), 0777, true);
-        if (!is_dir(public_path('nfse_pdf'))) @mkdir(public_path('nfse_pdf'), 0777, true);
+		if (!is_dir(public_path('nfse_doc'))) @mkdir(public_path('nfse_doc'), 0777, true);
+		if (!is_dir(public_path('nfse_pdf'))) @mkdir(public_path('nfse_pdf'), 0777, true);
 
-        $ambiente = ((int)($empresa->ambiente));
-        $nfse = new NfseSdk([
-            'token' => trim((string) $token->token),
-            'ambiente' => $ambiente,
-            'options' => ['debug' => false, 'timeout' => 60, 'port' => 443, 'http_version' => CURL_HTTP_VERSION_NONE],
-        ]);
+		$ambiente = ((int)($empresa->ambiente));
+		$nfse = new NfseSdk([
+			'token' => trim((string) $token->token),
+			'ambiente' => $ambiente,
+			'options' => ['debug' => false, 'timeout' => 60, 'port' => 443, 'http_version' => CURL_HTTP_VERSION_NONE],
+		]);
 
-        $servico = $item->servico;
+		$servico = $item->servico;
 
 		try {
 			// Helpers
-			$format2 = function ($v) { return number_format((float)$v, 2, '.', ''); };
-			$format4 = function ($v) { return number_format((float)$v, 4, '.', ''); };
+			$format2 = function ($v) {
+				return number_format((float)$v, 2, '.', '');
+			};
+			$format4 = function ($v) {
+				return number_format((float)$v, 4, '.', '');
+			};
 
 			// IBGE emitente
 			$codigoMunicipioEmitente = null;
@@ -882,64 +886,64 @@ class NfseController extends Controller
 				'token_prestador' => $tokenPrestador,
 			];
 
-            // dd($payload);
+			// dd($payload);
 
-            $resp = $nfse->cria($payload);
+			$resp = $nfse->cria($payload);
 
-            if (!empty($resp->sucesso)) {
-                if (isset($resp->chave)) {
-                    $item->chave = $resp->chave;
-                    $item->save();
-                }
+			if (!empty($resp->sucesso)) {
+				if (isset($resp->chave)) {
+					$item->chave = $resp->chave;
+					$item->save();
+				}
 
-                sleep(10); // muitos provedores processam em background
+				sleep(10); // muitos provedores processam em background
 
-                $consulta = $nfse->consulta(['chave' => $resp->chave]);
+				$consulta = $nfse->consulta(['chave' => $resp->chave]);
 
-                if (($consulta->codigo ?? null) != 5023) {
-                    // dd($consulta);
-                    if (!empty($consulta->sucesso)) {
-                        $item->estado = 'aprovado';
-                        $item->url_pdf_nfse = $consulta->link_pdf ?? '';
-                        $item->numero_nfse = $consulta->numero ?? 0;
-                        $item->serie = $consulta->serie ?? '';
-                        $item->codigo_verificacao = $consulta->codigo_verificacao ?? '';
-                        $item->save();
+				if (($consulta->codigo ?? null) != 5023) {
+					// dd($consulta);
+					if (!empty($consulta->sucesso)) {
+						$item->estado = 'aprovado';
+						$item->url_pdf_nfse = $consulta->link_pdf ?? '';
+						$item->numero_nfse = $consulta->numero ?? 0;
+						$item->serie = $consulta->serie ?? '';
+						$item->codigo_verificacao = $consulta->codigo_verificacao ?? '';
+						$item->save();
 
-                        if (isset($empresa->ultimo_numero_nfse) && !empty($consulta->numero)) {
-                            // dd($consulta);
-                            $empresa->ultimo_numero_nfse = (int)$consulta->numero;
-                            $empresa->numero_rps = (int)$consulta->rps_numero;
-                            $empresa->save();
-                        }
-                        if (!empty($consulta->xml)) {
-                            $xml = base64_decode($consulta->xml);
-                            @file_put_contents(public_path('nfse_doc/') . $resp->chave . '.xml', $xml);
-                        }
-                        if (!empty($consulta->pdf)) {
-                            $pdf = base64_decode($consulta->pdf);
-                            @file_put_contents(public_path('nfse_pdf/') . $resp->chave . '.pdf', $pdf);
-                        }
-                        return response()->json($consulta, 200);
-                    }
+						if (isset($empresa->ultimo_numero_nfse) && !empty($consulta->numero)) {
+							// dd($consulta);
+							$empresa->ultimo_numero_nfse = (int)$consulta->numero;
+							$empresa->numero_rps = (int)$consulta->rps_numero;
+							$empresa->save();
+						}
+						if (!empty($consulta->xml)) {
+							$xml = base64_decode($consulta->xml);
+							@file_put_contents(public_path('nfse_doc/') . $resp->chave . '.xml', $xml);
+						}
+						if (!empty($consulta->pdf)) {
+							$pdf = base64_decode($consulta->pdf);
+							@file_put_contents(public_path('nfse_pdf/') . $resp->chave . '.pdf', $pdf);
+						}
+						return response()->json($consulta, 200);
+					}
 
-                    $item->estado = 'rejeitado';
-                    $item->save();
-                    return response()->json($consulta, 422);
-                }
+					$item->estado = 'rejeitado';
+					$item->save();
+					return response()->json($consulta, 422);
+				}
 
-                $item->estado = 'processando';
-                $item->save();
-                return response()->json($consulta, 202);
-            }
+				$item->estado = 'processando';
+				$item->save();
+				return response()->json($consulta, 202);
+			}
 
-            $item->estado = 'rejeitado';
-            $item->save();
-            return response()->json($resp, 422);
-        } catch (\Throwable $e) {
-            return response()->json(['sucesso' => false, 'mensagem' => $e->getMessage(), 'linha' => $e->getLine()], 500);
-        }
-    }
+			$item->estado = 'rejeitado';
+			$item->save();
+			return response()->json($resp, 422);
+		} catch (\Throwable $e) {
+			return response()->json(['sucesso' => false, 'mensagem' => $e->getMessage(), 'linha' => $e->getLine()], 500);
+		}
+	}
 
 	private function retiraAcentos($texto)
 	{
@@ -1370,5 +1374,180 @@ class NfseController extends Controller
 			];
 			return redirect()->route('nfse.index')->with('status', $output);
 		}
+	}
+
+
+
+
+	public function substituicaoForm($id)
+	{
+		$business_id = request()->session()->get('user.business_id');
+		$item = Nfse::with('servico')
+			->where('empresa_id', $business_id)
+			->findOrFail($id);
+
+		abort_if($item->estado !== 'aprovado', 403, 'Somente NFSe aprovada pode ser substituída.');
+
+		$clientes = Contact::where('business_id', $business_id)->orderBy('name', 'asc')->get();
+		$servicos = Servico::where('business_id', $business_id)->orderBy('nome', 'desc')->get();
+		$config = BusinessLocation::where('business_id', $business_id)->first();
+		$nfseConfig = NfseConfig::where('empresa_id', $business_id)->first();
+		$types = Contact::getContactTypes();
+		$tipo = 'customer';
+		$usuario = User::allUsersDropdown($business_id, false);
+		$cities = $this->prepareCities();
+
+		return view('nfse.substituir', compact(
+			'item',
+			'clientes',
+			'servicos',
+			'config',
+			'nfseConfig',
+			'tipo',
+			'types',
+			'usuario',
+			'cities'
+		))->with('title', 'Substituir NFSe #' . $item->numero_nfse)
+			->with('estados', $this->prepareUFs());
+	}
+
+	public function substituirSalvar(Request $request, $id)
+	{
+		$this->_validate($request);
+		$request->validate([
+			'justificativa_substituicao' => 'required|string|min:15',
+		]);
+
+		$business_id = request()->session()->get('user.business_id');
+
+		$nfseAntiga = Nfse::with('servico')
+			->where('empresa_id', $business_id)
+			->findOrFail($id);
+
+		abort_if($nfseAntiga->estado !== 'aprovado', 403, 'NFSe não está aprovada.');
+
+		$nfseNova = DB::transaction(function () use ($request, $business_id, $nfseAntiga) {
+			$nova = $this->duplicarNotaParaSubstituicao($request, $business_id);
+
+			$nova->motivo_substituicao = $request->justificativa_substituicao;
+			$nova->substituicao_de_id  = $nfseAntiga->id;
+			$nova->substituicao_por_id = $nfseAntiga->numero_nfse;
+			$nova->save();
+
+			$nfseAntiga->motivo_substituicao = $request->justificativa_substituicao;
+			$nfseAntiga->substituicao_por_id = $nova->id;
+			$nfseAntiga->save();
+
+			return $nova;
+		});
+
+		$envioRequest = new Request(['id' => $nfseNova->id]);
+		// $envioResp    = $this->enviar($envioRequest);
+
+		// if ($envioResp->getStatusCode() !== 200) {
+		// 	return back()
+		// 		->withErrors(['transmissao' => $envioResp->getData()])
+		// 		->withInput();
+		// }
+
+		// $subResp = $this->substituir(new Request([
+		// 	'id_antiga'     => $nfseAntiga->id,
+		// 	'id_nova'       => $nfseNova->id,
+		// 	'justificativa' => $request->justificativa_substituicao,
+		// ]));
+
+		// if ($subResp->getStatusCode() !== 200) {
+		// 	return back()
+		// 		->withErrors(['substituicao' => $subResp->getData()])
+		// 		->withInput();
+		// }
+
+		return redirect()->route('nfse.index')->with('status', [
+			'success' => 1,
+			'msg'     => 'NFSe substituída com sucesso! Nova chave: ' . ($nfseNova->chave ?? '-'),
+		]);
+	}
+
+	private function duplicarNotaParaSubstituicao(Request $request, int $business_id): Nfse
+	{
+		$valorServico  = (float)str_replace(',', '.', $request->valor_servico);
+		$valorDeducoes = $request->valor_deducoes ? (float)str_replace(',', '.', $request->valor_deducoes) : 0;
+		$base          = max($valorServico - $valorDeducoes, 0);
+
+		$aliq = fn($campo) => $request->$campo ? (float)str_replace(',', '.', $request->$campo) : 0;
+
+		$pis       = $base * ($aliq('aliquota_pis') / 100);
+		$cofins    = $base * ($aliq('aliquota_cofins') / 100);
+		$inss      = $base * ($aliq('aliquota_inss') / 100);
+		$ir        = $base * ($aliq('aliquota_ir') / 100);
+		$csll      = $base * ($aliq('aliquota_csll') / 100);
+		$issRetido = $request->iss_retido == 1 ? $base * ($aliq('aliquota_iss') / 100) : 0;
+		$issqn     = $base * ($aliq('aliquota_issqn') / 100);
+
+		$descIncond = $request->desconto_incondicional ? (float)str_replace(',', '.', $request->desconto_incondicional) : 0;
+		$descCond   = $request->desconto_condicional ? (float)str_replace(',', '.', $request->desconto_condicional) : 0;
+		$outrasRet  = $request->outras_retencoes ? (float)str_replace(',', '.', $request->outras_retencoes) : 0;
+
+		$valorLiquido = $base - ($pis + $cofins + $inss + $ir + $csll + $issRetido + $issqn) - $outrasRet - $descIncond - $descCond;
+		$totalServico = max($valorLiquido, 0);
+
+		$nfse = Nfse::create([
+			'empresa_id'        => $business_id,
+			'valor_total'       => $totalServico,
+			'estado'            => 'novo',
+			'serie'             => '',
+			'codigo_verificacao' => '',
+			'numero_nfse'       => 0,
+			'url_xml'           => '',
+			'url_pdf_nfse'      => '',
+			'url_pdf_rps'       => '',
+			'cliente_id'        => $request->cliente,
+			'natureza_operacao' => $request->natureza_operacao,
+			'documento'         => $request->documento,
+			'razao_social'      => $request->razao_social,
+			'nome_fantasia'     => $request->nome_fantasia,
+			'im'                => $request->im ?? '',
+			'ie'                => $request->ie ?? '',
+			'cep'               => $request->cep ?? '',
+			'rua'               => $request->rua,
+			'numero'            => $request->numero,
+			'bairro'            => $request->bairro,
+			'complemento'       => $request->complemento ?? '',
+			'cidade_id'         => $request->cidade_id,
+			'email'             => $request->email ?? '',
+			'telefone'          => $request->telefone ?? ''
+		]);
+
+		NfseServico::create([
+			'nfse_id'                    => $nfse->id,
+			'discriminacao'              => $request->discriminacao,
+			'valor_servico'              => str_replace(',', '.', $request->valor_servico),
+			'servico_id'                 => $request->servico_id,
+			'codigo_cnae'                => $request->codigo_cnae ?? '',
+			'codigo_servico'             => $request->codigo_servico ?? '',
+			'codigo_tributacao_municipio' => $request->codigo_tributacao_municipio ?? '',
+			'exigibilidade_iss'          => $request->exigibilidade_iss,
+			'iss_retido'                 => $request->iss_retido,
+			'data_competencia'           => $request->data_competencia ?? null,
+			'estado_local_prestacao_servico' => $request->estado_local_prestacao_servico ?? '',
+			'cidade_local_prestacao_servico' => $request->cidade_local_prestacao_servico ?? '',
+			'valor_deducoes'             => $valorDeducoes,
+			'desconto_incondicional'     => $descIncond,
+			'desconto_condicional'       => $descCond,
+			'outras_retencoes'           => $outrasRet,
+			'aliquota_iss'               => $aliq('aliquota_iss'),
+			'aliquota_pis'               => $aliq('aliquota_pis'),
+			'aliquota_cofins'            => $aliq('aliquota_cofins'),
+			'aliquota_inss'              => $aliq('aliquota_inss'),
+			'aliquota_ir'                => $aliq('aliquota_ir'),
+			'aliquota_csll'              => $aliq('aliquota_csll'),
+			'intermediador'              => $request->intermediador ?? 'n',
+			'documento_intermediador'    => $request->documento_intermediador ?? '',
+			'nome_intermediador'         => $request->nome_intermediador ?? '',
+			'im_intermediador'           => $request->im_intermediador ?? '',
+			'responsavel_retencao_iss'   => $request->responsavel_retencao_iss ?? 1,
+		]);
+
+		return $nfse;
 	}
 }
