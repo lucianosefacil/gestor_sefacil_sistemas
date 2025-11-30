@@ -70,6 +70,8 @@ class NfseController extends Controller
 			->orderBy('id', 'desc')
 			->get();
 
+		$nfseNumeros = $nfses->pluck('numero_nfse', 'id')->toArray();
+
 		$total = 0;
 		foreach ($nfses as $item) {
 			$total += $item->valor_total;
@@ -91,7 +93,7 @@ class NfseController extends Controller
 
 
 		$estado = 'TODOS';
-		return view('nfse.index', compact('nfses', 'certificado', 'config', 'estado', 'total'))
+		return view('nfse.index', compact('nfses', 'certificado', 'config', 'estado', 'total', 'nfseNumeros'))
 			->with('links', true)
 			->with('clientes', $clientes)
 			->with('title', 'NFSe');
@@ -107,6 +109,8 @@ class NfseController extends Controller
 
 		$nfses = Nfse::where('nfses.empresa_id', $business_id)
 			->select('nfses.*');
+
+		$nfseNumeros = $nfses->pluck('numero_nfse', 'id')->toArray();
 
 		if (($dataInicial) && ($dataFinal)) {
 			$nfses->whereBetween('created_at', [
@@ -145,7 +149,7 @@ class NfseController extends Controller
 			->first();
 
 
-		return view('nfse.index', compact('nfses', 'certificado', 'config'))
+		return view('nfse.index', compact('nfses', 'certificado', 'config', 'nfseNumeros'))
 			->with('dataInicial', $dataInicial)
 			->with('dataFinal', $dataFinal)
 			->with('estado', $estado)
@@ -1047,6 +1051,7 @@ class NfseController extends Controller
 
 	public function cancelar(Request $request)
 	{
+		// dd($request->all());
 		// Criar pastas se não existirem
 		if (!is_dir(public_path('nfse_cancelada_doc'))) {
 			@mkdir(public_path('nfse_cancelada_doc'), 0777, true);
@@ -1076,6 +1081,8 @@ class NfseController extends Controller
 			'justificativa' => $request->justificativa ?? $request->motivo,
 			'codigo_cancelamento' => $request->codigo_cancelamento ?? '2',
 		]);
+
+		// dd($resp);
 
 		// Log para debug
 		Log::info('=== RESPOSTA CANCELAMENTO NFSe (Integra Notas) ===', [
@@ -1411,6 +1418,14 @@ class NfseController extends Controller
 			->with('estados', $this->prepareUFs());
 	}
 
+
+
+
+
+
+
+
+
 	public function substituirSalvar(Request $request, $id)
 	{
 		$this->_validate($request);
@@ -1424,49 +1439,31 @@ class NfseController extends Controller
 			->where('empresa_id', $business_id)
 			->findOrFail($id);
 
-		abort_if($nfseAntiga->estado !== 'aprovado', 403, 'NFSe não está aprovada.');
+		abort_if($nfseAntiga->estado !== 'aprovado', 403, 'Somente NFSe aprovada pode ser substituída.');
 
 		$nfseNova = DB::transaction(function () use ($request, $business_id, $nfseAntiga) {
 			$nova = $this->duplicarNotaParaSubstituicao($request, $business_id);
 
 			$nova->motivo_substituicao = $request->justificativa_substituicao;
-			$nova->substituicao_de_id  = $nfseAntiga->id;
-			$nova->substituicao_por_id = $nfseAntiga->numero_nfse;
+			$nova->substituicao_de_id  = $nfseAntiga->id; // guarda a origem
+			$nova->estado              = 'novo';          // usuário vai transmitir depois
 			$nova->save();
 
 			$nfseAntiga->motivo_substituicao = $request->justificativa_substituicao;
-			$nfseAntiga->substituicao_por_id = $nova->id;
+			$nfseAntiga->substituicao_por_id = $nova->id; // aponta para a nova
 			$nfseAntiga->save();
 
 			return $nova;
 		});
 
-		$envioRequest = new Request(['id' => $nfseNova->id]);
-		$envioResp    = $this->enviar($envioRequest);
-
-		if ($envioResp->getStatusCode() !== 200) {
-			return back()
-				->withErrors(['transmissao' => $envioResp->getData()])
-				->withInput();
-		}
-
-		$subResp = $this->substituir(new Request([
-			'id_antiga'     => $nfseAntiga->id,
-			'id_nova'       => $nfseNova->id,
-			'justificativa' => $request->justificativa_substituicao,
-		]));
-
-		if ($subResp->getStatusCode() !== 200) {
-			return back()
-				->withErrors(['substituicao' => $subResp->getData()])
-				->withInput();
-		}
-
 		return redirect()->route('nfse.index')->with('status', [
 			'success' => 1,
-			'msg'     => 'NFSe substituída com sucesso! Nova chave: ' . ($nfseNova->chave ?? '-'),
+			'msg'     => 'Nova NFSe criada para substituição (#' . $nfseNova->id . '). Edite ou transmita na lista normalmente.',
 		]);
 	}
+
+
+
 
 	private function duplicarNotaParaSubstituicao(Request $request, int $business_id): Nfse
 	{
@@ -1549,5 +1546,365 @@ class NfseController extends Controller
 		]);
 
 		return $nfse;
+	}
+
+
+	private function montarPayloadRPS(Nfse $nfse, Business $empresa, NfseConfig $token, bool $usarNumeroExistente = false): array
+	{
+		$servico = $nfse->servico;
+
+		// Helpers
+		$format2 = function ($v) {
+			return number_format((float)$v, 2, '.', '');
+		};
+		$format4 = function ($v) {
+			return number_format((float)$v, 4, '.', '');
+		};
+
+		// IBGE emitente
+		$codigoMunicipioEmitente = null;
+		if (!empty($token->cidade_id)) {
+			$city = City::find($token->cidade_id);
+			$codigoMunicipioEmitente = $city ? (string)$city->codigo : null;
+		}
+
+		// Tomador docs
+		$doc = preg_replace('/[^0-9]/', '', (string)$nfse->documento);
+		$isCpfTomador = strlen($doc) === 11;
+
+		// Competência YYYY-MM
+		$competencia = date('Y-m');
+
+		// Simples Nacional
+		$optanteSimples = ((int)($empresa->regime ?? 1)) === 1;
+		$incentivoFiscal = false;
+
+		// Cálculos
+		$valorServicos = (float)$servico->valor_servico;
+		$valorDeducoes = (float)($servico->valor_deducoes ?? 0);
+		$baseCalculo = max($valorServicos - $valorDeducoes, 0);
+		$aliquotaIssPercent = (float)($servico->aliquota_iss ?? 0);
+		$aliquotaIssqnFrac = $aliquotaIssPercent / 100;
+		$valorIss = $baseCalculo * $aliquotaIssqnFrac;
+		$valorPis = (float)($servico->valor_pis ?? 0);
+		$valorCofins = (float)($servico->valor_cofins ?? 0);
+		$valorInss = (float)($servico->valor_inss ?? 0);
+		$valorIr = (float)($servico->valor_ir ?? 0);
+		$valorCsll = (float)($servico->valor_csll ?? 0);
+		$outrasRetencoes = (float)($servico->outras_retencoes ?? 0);
+		$descontoIncond = (float)($servico->desconto_incondicional ?? 0);
+		$descontoCond = (float)($servico->desconto_condicional ?? 0);
+		$valorLiquidoNfse = $baseCalculo - $valorPis - $valorCofins - $valorInss - $valorIr - $valorCsll - $outrasRetencoes - $descontoIncond - $descontoCond;
+
+		// Itens
+		$itemListaServico = (string)$servico->codigo_servico;
+
+		// Numeração (usa o número RPS já gerado)
+		// $numero = (int)($empresa->numero_rps ?? 0) + 1;
+		// $numeroSerie = (int)($empresa->numero_serie_nfse ?? 1);
+
+		// Se a nota JÁ está aprovada, usa o número DELA
+		if ($usarNumeroExistente && !empty($nfse->numero_nfse)) {
+			$numero = (int)$nfse->numero_nfse;  // ← Usa o número que ela JÁ TEM (64)
+			$numeroSerie = (int)($nfse->serie ?: $empresa->numero_serie_nfse ?? 1);
+		} else {
+			// Se é nota NOVA, gera novo número
+			$numero = (int)($empresa->numero_rps ?? 0) + 1;  // ← Gera 65, 66, etc
+			$numeroSerie = (int)($empresa->numero_serie_nfse ?? 1);
+		}
+
+		// Prestador
+		$cnpjPrest = preg_replace('/[^0-9]/', '', (string)$empresa->cnpj);
+		$imPrest = (string)($token->im ?? '');
+		$razaoPrest = (string)($token->razao_social ?? $empresa->name ?? '');
+		$fantasiaPrest = (string)($token->nome ?? $empresa->name ?? '');
+		$telefonePrest = (string)($token->telefone ?? '');
+		$emailPrest = (string)($token->email ?? '');
+		$cepPrest = preg_replace('/[^0-9]/', '', (string)($token->cep ?? ''));
+		$logradouroPrest = (string)($token->rua ?? '');
+		$numeroPrest = (string)($token->numero ?? '');
+		$complPrest = (string)($token->complemento ?? '');
+		$bairroPrest = (string)($token->bairro ?? '');
+		$codigoCnaePrest = (string)($empresa->cnae ?? ($servico->codigo_cnae ?? ''));
+		$tokenPrestador = trim((string)$token->token);
+		$codigoAleatorio = str_pad((string)random_int(0, 99999999), 8, '0', STR_PAD_LEFT);
+
+		return [
+			'numero' => (string)$numero,
+			'serie' => (string)$numeroSerie,
+			'tipo' => '1',
+			'data_emissao' => date('Y-m-d\TH:i:sP'),
+			'competencia' => $competencia,
+			'natureza_operacao' => (string)($nfse->natureza_operacao ?? '1'),
+			'optante_simples_nacional' => $optanteSimples,
+			'incentivo_fiscal' => $incentivoFiscal,
+			'status' => '1',
+			'valores_nfse' => [
+				'base_calculo' => $format2($baseCalculo),
+				'valor_liquido_nfse' => $format2($valorLiquidoNfse),
+			],
+			'servico' => [
+				'valor_servicos' => $format2($valorServicos),
+				'valores' => [
+					'valor_deducoes' => $format2($valorDeducoes),
+					'valor_pis' => $format2($valorPis),
+					'valor_cofins' => $format2($valorCofins),
+					'valor_inss' => $format2($valorInss),
+					'valor_ir' => $format2($valorIr),
+					'valor_csll' => $format2($valorCsll),
+					'outras_retencoes' => $format2($outrasRetencoes),
+					'valor_iss' => $format2($valorIss),
+					'aliquota' => $format2($aliquotaIssPercent),
+					'desconto_incondicionado' => $format2($descontoIncond),
+					'desconto_condicionado' => $format2($descontoCond),
+				],
+				'iss_retido' => ((int)($servico->iss_retido ?? 0)) === 1,
+				'item_lista_servico' => $itemListaServico,
+				'codigo_municipio' => (string)$codigoMunicipioEmitente,
+				'municipio_incidencia' => (string)$codigoMunicipioEmitente,
+				'exigibilidade_iss' => (string)($servico->exigibilidade_iss),
+				'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
+				'aliquota_issqn' => $format4($aliquotaIssqnFrac),
+				'itens' => [[
+					'codigo' => $itemListaServico,
+					'codigo_cnae' => (string)($servico->codigo_cnae ?? ''),
+					'codigo_tributacao_municipio' => (string)($servico->codigo_tributacao_municipio ?? ''),
+					'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
+					'quantidade' => '1',
+					'valor_unitario' => $format2($valorServicos),
+					'valor_servicos' => (float)$valorServicos,
+				]],
+			],
+			'prestador' => [
+				'cnpj' => $cnpjPrest,
+				'inscricao_municipal' => $imPrest,
+				'razao_social' => $this->retiraAcentos($razaoPrest),
+				'nome_fantasia' => $this->retiraAcentos($fantasiaPrest),
+				'codigo_cnae' => $codigoCnaePrest,
+				'endereco' => [
+					'logradouro' => $this->retiraAcentos($logradouroPrest),
+					'numero' => $this->retiraAcentos($numeroPrest),
+					'complemento' => $this->retiraAcentos($complPrest),
+					'bairro' => $this->retiraAcentos($bairroPrest),
+					'codigo_municipio' => (string)$codigoMunicipioEmitente,
+					'cep' => $cepPrest,
+				],
+				'contato' => [
+					'telefone' => $telefonePrest,
+					'email' => $emailPrest,
+				],
+				'token' => $tokenPrestador,
+			],
+			'tomador' => [
+				'identificacao_tomador' => $isCpfTomador ? ['cpf' => $doc] : ['cnpj' => $doc],
+				($isCpfTomador ? 'cpf' : 'cnpj') => $doc,
+				'razao_social' => $this->retiraAcentos((string)$nfse->razao_social),
+				'endereco' => [
+					'logradouro' => $this->retiraAcentos((string)$nfse->rua),
+					'numero' => $this->retiraAcentos((string)$nfse->numero),
+					'complemento' => $this->retiraAcentos((string)($nfse->complemento ?? '')),
+					'bairro' => $this->retiraAcentos((string)$nfse->bairro),
+					'codigo_municipio' => (string)($nfse->cidade->codigo ?? ''),
+					'uf' => (string)($nfse->cidade->uf ?? ''),
+					'cep' => preg_replace('/[^0-9]/', '', (string)$nfse->cep),
+				],
+				'contato' => [
+					'telefone' => (string)($nfse->telefone ?? ''),
+					'email' => (string)($nfse->email ?? ''),
+				],
+			],
+			'orgao_gerador' => [
+				'codigo_municipio' => (string)$codigoMunicipioEmitente,
+			],
+			'nacional' => true,
+			'codigo_aleatorio' => $codigoAleatorio,
+			'token_prestador' => $tokenPrestador,
+		];
+	}
+
+	private function executarSubstituicaoAutomatica(Nfse $nfseAntiga, Nfse $nfseNova, string $justificativa, string $codigoCancelamento = '1'): array
+	{
+		$business_id = request()->session()->get('user.business_id');
+		$empresa = Business::where('id', $business_id)->first();
+		$token   = NfseConfig::where('empresa_id', $business_id)->first();
+
+		if (!$empresa || !$token) {
+			return ['status' => 401, 'body' => ['sucesso' => false, 'mensagem' => 'Configuração de NFS-e não encontrada para esta empresa.']];
+		}
+
+		if (empty($nfseAntiga->chave)) {
+			return ['status' => 422, 'body' => ['sucesso' => false, 'mensagem' => 'NFSe antiga sem chave; não é possível substituir.']];
+		}
+		if (empty($nfseNova->chave)) {
+			return ['status' => 422, 'body' => ['sucesso' => false, 'mensagem' => 'NFSe nova sem chave; primeiro autorize a nova NFSe.']];
+		}
+
+		if (!is_dir(public_path('nfse_doc'))) @mkdir(public_path('nfse_doc'), 0777, true);
+		if (!is_dir(public_path('nfse_pdf'))) @mkdir(public_path('nfse_pdf'), 0777, true);
+
+		$nfse = new NfseSdk([
+			'token'    => trim((string) $token->token),
+			'ambiente' => (int) $empresa->ambiente,
+			'options'  => [
+				'debug'        => false,
+				'timeout'      => 60,
+				'port'         => 443,
+				'http_version' => CURL_HTTP_VERSION_NONE,
+			],
+		]);
+
+		// IMPORTANTE: Montar o RPS completo da nova nota
+		$payloadRPS = $this->montarPayloadRPS($nfseNova, $empresa, $token, true);
+
+		// Adicionar os dados específicos da substituição
+		$payload = array_merge($payloadRPS, [
+			'chave'              => $nfseAntiga->chave,
+			'codigo_cancelamento' => $codigoCancelamento,
+			'justificativa'      => $justificativa,
+		]);
+
+		Log::info('=== INICIANDO SUBSTITUIÇÃO NFSe ===', [
+			'nfse_antiga_id' => $nfseAntiga->id,
+			'nfse_antiga_numero' => $nfseAntiga->numero_nfse,
+			'nfse_antiga_chave' => $nfseAntiga->chave,
+			'nfse_nova_id' => $nfseNova->id,
+			'nfse_nova_numero' => $nfseNova->numero_nfse,
+			'nfse_nova_chave' => $nfseNova->chave,
+		]);
+
+		Log::info('=== PAYLOAD SUBSTITUIÇÃO COMPLETO ===', $payload);
+
+		try {
+			$resp = $nfse->substitui($payload);
+
+			Log::info('=== RESPOSTA SUBSTITUIÇÃO ===', [
+				'resposta' => $resp
+			]);
+
+			if (!empty($resp->sucesso) && $resp->sucesso === true) {
+				$nfseAntiga->estado             = 'cancelado';
+				$nfseAntiga->cancelado_em       = now();
+				$nfseAntiga->chave_referenciada = $nfseNova->chave;
+				$nfseAntiga->save();
+
+				if (!empty($resp->xml)) {
+					$xml = base64_decode($resp->xml);
+					@file_put_contents(public_path('nfse_doc/') . 'cancelamento_' . $nfseAntiga->chave . '.xml', $xml);
+				}
+				if (!empty($resp->pdf)) {
+					$pdf = base64_decode($resp->pdf);
+					@file_put_contents(public_path('nfse_pdf/') . 'cancelamento_' . $nfseAntiga->chave . '.pdf', $pdf);
+				}
+
+				return ['status' => 200, 'body' => $resp];
+			}
+
+			$mensagem = $resp->mensagem ?? $resp->erros ?? 'Erro desconhecido na substituição';
+			Log::error('=== ERRO NA SUBSTITUIÇÃO ===', [
+				'resposta' => $resp,
+				'mensagem' => $mensagem
+			]);
+
+			return ['status' => 422, 'body' => ['sucesso' => false, 'mensagem' => $mensagem, 'detalhes' => $resp]];
+		} catch (\Exception $e) {
+			Log::error('=== EXCEÇÃO NA SUBSTITUIÇÃO ===', [
+				'erro' => $e->getMessage(),
+				'linha' => $e->getLine(),
+				'arquivo' => $e->getFile()
+			]);
+
+			return ['status' => 500, 'body' => ['sucesso' => false, 'mensagem' => 'Erro ao processar substituição: ' . $e->getMessage()]];
+		}
+	}
+
+	public function enviarSubstituicao(Request $request)
+	{
+		$business_id = request()->session()->get('user.business_id');
+		$item = Nfse::with('servico')->findOrFail($request->id);
+
+		if ($item->estado === 'aprovado' && !empty($item->chave)) {
+			// Já está aprovada, vai direto para substituição
+			$nfseAntiga = Nfse::find($item->substituicao_de_id);
+			if (!$nfseAntiga || $nfseAntiga->estado !== 'aprovado') {
+				return response()->json(['sucesso' => false, 'mensagem' => 'NFSe antiga não encontrada ou não está aprovada'], 422);
+			}
+
+			$justificativa = $item->motivo_substituicao ?? 'Substituição de NFSe';
+			$codigoCancelamento = $request->codigo_cancelamento ?? '1';
+
+			$resultSub = $this->executarSubstituicaoAutomatica(
+				$nfseAntiga,
+				$item,
+				$justificativa,
+				$codigoCancelamento
+			);
+
+			if ($resultSub['status'] === 200) {
+				return response()->json([
+					'sucesso' => true,
+					'mensagem' => 'Substituição concluída com sucesso',
+					'nfse_nova' => $item->numero_nfse,
+					'nfse_antiga' => $nfseAntiga->numero_nfse
+				], 200);
+			}
+
+			return response()->json($resultSub['body'], $resultSub['status']);
+		}
+
+		if ($item->estado === 'aprovado') return response()->json(['sucesso' => false, 'mensagem' => 'Este documento já está aprovado'], 401);
+		if ($item->estado === 'cancelado') return response()->json(['sucesso' => false, 'mensagem' => 'Este documento está cancelado'], 401);
+		if (empty($item->substituicao_de_id)) return response()->json(['sucesso' => false, 'mensagem' => 'Esta NFSe não é uma substituição'], 422);
+
+		$nfseAntiga = Nfse::find($item->substituicao_de_id);
+		if (!$nfseAntiga || $nfseAntiga->estado !== 'aprovado') {
+			return response()->json(['sucesso' => false, 'mensagem' => 'NFSe antiga não encontrada ou não está aprovada'], 422);
+		}
+
+		// 1. Transmitir a nova NFSe (reutiliza a lógica do enviar())
+		$requestEnvio = new Request(['id' => $item->id]);
+		$responseEnvio = $this->enviar($requestEnvio);
+		$statusEnvio = $responseEnvio->getStatusCode();
+
+		if ($statusEnvio !== 200) {
+			return $responseEnvio; // Retorna erro da transmissão
+		}
+
+		// Recarrega a nova NFSe para pegar a chave gerada
+		$item->refresh();
+
+		if (empty($item->chave)) {
+			return response()->json(['sucesso' => false, 'mensagem' => 'Nova NFSe transmitida mas sem chave; aguarde processamento'], 202);
+		}
+
+		// 2. Executar substituição na API
+		$justificativa = $item->motivo_substituicao ?? 'Substituição de NFSe';
+		$codigoCancelamento = $request->codigo_cancelamento ?? '1';
+
+		$resultSub = $this->executarSubstituicaoAutomatica(
+			$nfseAntiga,
+			$item,
+			$justificativa,
+			$codigoCancelamento
+		);
+
+		if ($resultSub['status'] === 200) {
+			return response()->json([
+				'sucesso' => true,
+				'mensagem' => 'Substituição concluída com sucesso',
+				'nfse_nova' => $item->numero_nfse,
+				'nfse_antiga' => $nfseAntiga->numero_nfse
+			], 200);
+		}
+
+		// Se a substituição falhou, NÃO reverter o estado se já foi aprovada
+		// Apenas logar o erro
+		Log::warning('Substituição falhou mas NFSe foi aprovada', [
+			'nfse_id' => $item->id,
+			'chave' => $item->chave,
+			'estado_atual' => $item->estado,
+			'erro' => $resultSub['body']
+		]);
+
+		return response()->json($resultSub['body'], $resultSub['status']);
 	}
 }

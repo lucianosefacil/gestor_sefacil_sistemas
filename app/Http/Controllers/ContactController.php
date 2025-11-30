@@ -1627,4 +1627,33 @@ class ContactController extends Controller
             ]);
         }
     }
+
+    // Adicione este método no ContactController.php (pode ser após o método buscarCep, linha ~1594)
+
+    public function buscarCnpj($cnpj)
+    {
+        try {
+            $cnpjLimpo = preg_replace('/[^0-9]/', '', $cnpj);
+
+            if (strlen($cnpjLimpo) !== 14 && strlen($cnpjLimpo) !== 11) {
+                return response()->json(['erro' => 'CNPJ/CPF inválido'], 400);
+            }
+
+            // Fazer requisição via Http (backend não tem problema de CORS)
+            $response = \Illuminate\Support\Facades\Http::timeout(10)
+                ->get('https://publica.cnpj.ws/cnpj/' . $cnpjLimpo);
+
+            if ($response->successful()) {
+                return response()->json($response->json());
+            }
+
+            return response()->json(['erro' => 'CNPJ não encontrado'], 404);
+        } catch (\Exception $e) {
+            \Log::error('Erro ao buscar CNPJ', [
+                'cnpj' => $cnpj,
+                'erro' => $e->getMessage()
+            ]);
+            return response()->json(['erro' => 'Erro ao buscar CNPJ: ' . $e->getMessage()], 500);
+        }
+    }
 }
