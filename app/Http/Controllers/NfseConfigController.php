@@ -113,7 +113,7 @@ class NfseConfigController extends Controller
                 $configNota = Business::where('id', $business_id)
                     ->first();
                 $configNota->token_nfse = $resp->token;
-                $configNota->integracao_nfse = 'integranotas';
+                // $configNota->integracao_nfse = 'integranotas';
                 $configNota->save();
                 $output = [
                     'success' => 1,
@@ -140,7 +140,7 @@ class NfseConfigController extends Controller
     {
         try {
             $params = [
-                'token' => env('TOKEN_INTEGRA') ,
+                'token' => env('TOKEN_INTEGRA'),
                 'ambiente' => 1,
                 'options' => [
                     'debug' => false,
@@ -216,9 +216,34 @@ class NfseConfigController extends Controller
             $request->merge([
                 'logo' => $file_name
             ]);
-
-            // dd($request->all());
             $item->fill($request->all())->save();
+
+            if (empty($item->token)) {
+                $resp = $this->storeSofthouse($request);
+                if (!is_object($resp) || $resp->codigo !== 200) {
+                    $mensagem = $resp->mensagem ?? 'Falha ao registrar emitente na Integra Notas.';
+                    return redirect()->route('nfse-config.index')->with('status', [
+                        'success' => 0,
+                        'msg' => $mensagem
+                    ]);
+                }
+
+                $item->token = $resp->token;
+                $item->save();
+
+                $business = Business::find($item->empresa_id);
+                if ($business) {
+                    $business->token_nfse = $resp->token;
+                    $business->save();
+                }
+
+                return redirect()->route('nfse-config.index')->with('status', [
+                    'success' => 1,
+                    'msg' => 'Emitente sincronizado e token gerado com sucesso!'
+                ]);
+            }
+
+            $item->save();
 
             $resp = $this->atualizaSofthouse($request, $item);
 
