@@ -748,7 +748,7 @@ class NfseController extends Controller
 			$isCpfTomador = strlen($doc) === 11;
 
 			// Competência YYYY-MM
-			$competencia = $servico->data_competencia ? \Carbon\Carbon::parse($servico->data_competencia)->format('Y-m-d\TH:i:sP') : \Carbon\Carbon::parse('2020-05-16T12:33:20-03:00')->format('Y-m-d\TH:i:sP');
+			$competencia = $servico->data_competencia ? \Carbon\Carbon::parse($servico->data_competencia)->format('Y-m-d\TH:i:sP') : \Carbon\Carbon::now()->format('Y-m-d\TH:i:sP');
 
 			// Simples Nacional
 			$optanteSimples = ((int)($empresa->regime ?? 1)) === 1;
@@ -1295,7 +1295,7 @@ class NfseController extends Controller
 				'tipo' => '1',
 				'status' => '1',
 				'data_emissao' => date('Y-m-d\TH:i:sP'),
-				'data_competencia' => $servico->data_competencia ? \Carbon\Carbon::parse($servico->data_competencia)->format('Y-m-d\TH:i:sP') : \Carbon\Carbon::parse('2020-05-16T12:33:20-03:00')->format('Y-m-d\TH:i:sP'),
+				'data_competencia' => $servico->data_competencia ? \Carbon\Carbon::parse($servico->data_competencia)->format('Y-m-d\TH:i:sP') : \Carbon\Carbon::now()->format('Y-m-d\TH:i:sP'),
 				'regime_tributacao' => '6',
 				'tomador' => [
 					'cnpj' => strlen($doc) === 14 ? $doc : null,
