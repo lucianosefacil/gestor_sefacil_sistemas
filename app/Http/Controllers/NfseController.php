@@ -748,7 +748,7 @@ class NfseController extends Controller
 			$isCpfTomador = strlen($doc) === 11;
 
 			// Competência YYYY-MM
-			$competencia = date('Y-m-d\TH:i:sP', strtotime($servico->data_competencia)) ?? date('Y-m-d\TH:i:sP');
+			$competencia = $servico->data_competencia ? \Carbon\Carbon::parse($servico->data_competencia)->format('Y-m-d\TH:i:sP') : \Carbon\Carbon::parse('2020-05-16T12:33:20-03:00')->format('Y-m-d\TH:i:sP');
 
 			// Simples Nacional
 			$optanteSimples = ((int)($empresa->regime ?? 1)) === 1;
@@ -1295,7 +1295,7 @@ class NfseController extends Controller
 				'tipo' => '1',
 				'status' => '1',
 				'data_emissao' => date('Y-m-d\TH:i:sP'),
-				'data_competencia' => date('Y-m-d\TH:i:sP', strtotime($servico->data_competencia)) ?? date('Y-m-d\TH:i:sP'),
+				'data_competencia' => $servico->data_competencia ? \Carbon\Carbon::parse($servico->data_competencia)->format('Y-m-d\TH:i:sP') : \Carbon\Carbon::parse('2020-05-16T12:33:20-03:00')->format('Y-m-d\TH:i:sP'),
 				'regime_tributacao' => '6',
 				'tomador' => [
 					'cnpj' => strlen($doc) === 14 ? $doc : null,
@@ -1726,189 +1726,217 @@ class NfseController extends Controller
 		];
 	}
 
+	// private function executarSubstituicaoAutomatica(Nfse $nfseAntiga, Nfse $nfseNova, string $justificativa, string $codigoCancelamento = '1'): array
+	// {
+	// 	$business_id = request()->session()->get('user.business_id');
+	// 	$empresa = Business::where('id', $business_id)->first();
+	// 	$token   = NfseConfig::where('empresa_id', $business_id)->first();
+
+	// 	if (!$empresa || !$token) {
+	// 		return ['status' => 401, 'body' => ['sucesso' => false, 'mensagem' => 'Configuração de NFS-e não encontrada para esta empresa.']];
+	// 	}
+
+	// 	if (empty($nfseAntiga->chave)) {
+	// 		return ['status' => 422, 'body' => ['sucesso' => false, 'mensagem' => 'NFSe antiga sem chave; não é possível substituir.']];
+	// 	}
+	// 	if (empty($nfseNova->chave)) {
+	// 		return ['status' => 422, 'body' => ['sucesso' => false, 'mensagem' => 'NFSe nova sem chave; primeiro autorize a nova NFSe.']];
+	// 	}
+
+	// 	if (!is_dir(public_path('nfse_doc'))) @mkdir(public_path('nfse_doc'), 0777, true);
+	// 	if (!is_dir(public_path('nfse_pdf'))) @mkdir(public_path('nfse_pdf'), 0777, true);
+
+	// 	$nfse = new NfseSdk([
+	// 		'token'    => trim((string) $token->token),
+	// 		'ambiente' => (int) $empresa->ambiente,
+	// 		'options'  => [
+	// 			'debug'        => false,
+	// 			'timeout'      => 60,
+	// 			'port'         => 443,
+	// 			'http_version' => CURL_HTTP_VERSION_NONE,
+	// 		],
+	// 	]);
+
+	// 	// IMPORTANTE: Montar o RPS completo da nova nota
+	// 	$payloadRPS = $this->montarPayloadRPS($nfseNova, $empresa, $token, true);
+
+	// 	// Adicionar os dados específicos da substituição
+	// 	$payload = array_merge($payloadRPS, [
+	// 		'chave'              => $nfseAntiga->chave,
+	// 		'codigo_cancelamento' => $codigoCancelamento,
+	// 		'justificativa'      => $justificativa,
+	// 	]);
+
+	// 	Log::info('=== INICIANDO SUBSTITUIÇÃO NFSe ===', [
+	// 		'nfse_antiga_id' => $nfseAntiga->id,
+	// 		'nfse_antiga_numero' => $nfseAntiga->numero_nfse,
+	// 		'nfse_antiga_chave' => $nfseAntiga->chave,
+	// 		'nfse_nova_id' => $nfseNova->id,
+	// 		'nfse_nova_numero' => $nfseNova->numero_nfse,
+	// 		'nfse_nova_chave' => $nfseNova->chave,
+	// 	]);
+
+	// 	Log::info('=== PAYLOAD SUBSTITUIÇÃO COMPLETO ===', $payload);
+
+	// 	try {
+	// 		$resp = $nfse->substitui($payload);
+
+	// 		Log::info('=== RESPOSTA SUBSTITUIÇÃO ===', [
+	// 			'resposta' => $resp
+	// 		]);
+
+	// 		if (!empty($resp->sucesso) && $resp->sucesso === true) {
+	// 			$nfseAntiga->estado             = 'cancelado';
+	// 			$nfseAntiga->cancelado_em       = now();
+	// 			$nfseAntiga->chave_referenciada = $nfseNova->chave;
+	// 			$nfseAntiga->save();
+
+	// 			if (!empty($resp->xml)) {
+	// 				$xml = base64_decode($resp->xml);
+	// 				@file_put_contents(public_path('nfse_doc/') . 'cancelamento_' . $nfseAntiga->chave . '.xml', $xml);
+	// 			}
+	// 			if (!empty($resp->pdf)) {
+	// 				$pdf = base64_decode($resp->pdf);
+	// 				@file_put_contents(public_path('nfse_pdf/') . 'cancelamento_' . $nfseAntiga->chave . '.pdf', $pdf);
+	// 			}
+
+	// 			return ['status' => 200, 'body' => $resp];
+	// 		}
+
+	// 		$mensagem = $resp->mensagem ?? $resp->erros ?? 'Erro desconhecido na substituição';
+	// 		Log::error('=== ERRO NA SUBSTITUIÇÃO ===', [
+	// 			'resposta' => $resp,
+	// 			'mensagem' => $mensagem
+	// 		]);
+
+	// 		return ['status' => 422, 'body' => ['sucesso' => false, 'mensagem' => $mensagem, 'detalhes' => $resp]];
+	// 	} catch (\Exception $e) {
+	// 		Log::error('=== EXCEÇÃO NA SUBSTITUIÇÃO ===', [
+	// 			'erro' => $e->getMessage(),
+	// 			'linha' => $e->getLine(),
+	// 			'arquivo' => $e->getFile()
+	// 		]);
+
+	// 		return ['status' => 500, 'body' => ['sucesso' => false, 'mensagem' => 'Erro ao processar substituição: ' . $e->getMessage()]];
+	// 	}
+	// }
+
 	private function executarSubstituicaoAutomatica(Nfse $nfseAntiga, Nfse $nfseNova, string $justificativa, string $codigoCancelamento = '1'): array
 	{
 		$business_id = request()->session()->get('user.business_id');
-		$empresa = Business::where('id', $business_id)->first();
+		$empresa = Business::find($business_id);
 		$token   = NfseConfig::where('empresa_id', $business_id)->first();
 
 		if (!$empresa || !$token) {
-			return ['status' => 401, 'body' => ['sucesso' => false, 'mensagem' => 'Configuração de NFS-e não encontrada para esta empresa.']];
+			return ['status' => 401, 'body' => ['sucesso' => false, 'mensagem' => 'Configuração NFSe não encontrada.']];
 		}
-
 		if (empty($nfseAntiga->chave)) {
-			return ['status' => 422, 'body' => ['sucesso' => false, 'mensagem' => 'NFSe antiga sem chave; não é possível substituir.']];
-		}
-		if (empty($nfseNova->chave)) {
-			return ['status' => 422, 'body' => ['sucesso' => false, 'mensagem' => 'NFSe nova sem chave; primeiro autorize a nova NFSe.']];
+			return ['status' => 422, 'body' => ['sucesso' => false, 'mensagem' => 'NFSe antiga sem chave.']];
 		}
 
 		if (!is_dir(public_path('nfse_doc'))) @mkdir(public_path('nfse_doc'), 0777, true);
 		if (!is_dir(public_path('nfse_pdf'))) @mkdir(public_path('nfse_pdf'), 0777, true);
 
-		$nfse = new NfseSdk([
-			'token'    => trim((string) $token->token),
+		$sdk = new NfseSdk([
+			'token' => trim((string) $token->token),
 			'ambiente' => (int) $empresa->ambiente,
-			'options'  => [
-				'debug'        => false,
-				'timeout'      => 60,
-				'port'         => 443,
-				'http_version' => CURL_HTTP_VERSION_NONE,
-			],
+			'options' => ['debug' => false, 'timeout' => 60, 'port' => 443, 'http_version' => CURL_HTTP_VERSION_NONE],
 		]);
 
-		// IMPORTANTE: Montar o RPS completo da nova nota
-		$payloadRPS = $this->montarPayloadRPS($nfseNova, $empresa, $token, true);
-
-		// Adicionar os dados específicos da substituição
-		$payload = array_merge($payloadRPS, [
-			'chave'              => $nfseAntiga->chave,
-			'codigo_cancelamento' => $codigoCancelamento,
-			'justificativa'      => $justificativa,
-		]);
-
-		Log::info('=== INICIANDO SUBSTITUIÇÃO NFSe ===', [
-			'nfse_antiga_id' => $nfseAntiga->id,
-			'nfse_antiga_numero' => $nfseAntiga->numero_nfse,
-			'nfse_antiga_chave' => $nfseAntiga->chave,
-			'nfse_nova_id' => $nfseNova->id,
-			'nfse_nova_numero' => $nfseNova->numero_nfse,
-			'nfse_nova_chave' => $nfseNova->chave,
-		]);
-
-		Log::info('=== PAYLOAD SUBSTITUIÇÃO COMPLETO ===', $payload);
+		$payload = array_merge(
+			$this->montarPayloadRPS($nfseNova, $empresa, $token, false),
+			[
+				'chave' => $nfseAntiga->chave,
+				'codigo_cancelamento' => $codigoCancelamento,
+				'justificativa' => $justificativa,
+			]
+		);
 
 		try {
-			$resp = $nfse->substitui($payload);
+			$resp = $sdk->substitui($payload);
 
-			Log::info('=== RESPOSTA SUBSTITUIÇÃO ===', [
-				'resposta' => $resp
-			]);
-
-			if (!empty($resp->sucesso) && $resp->sucesso === true) {
-				$nfseAntiga->estado             = 'cancelado';
-				$nfseAntiga->cancelado_em       = now();
-				$nfseAntiga->chave_referenciada = $nfseNova->chave;
-				$nfseAntiga->save();
-
-				if (!empty($resp->xml)) {
-					$xml = base64_decode($resp->xml);
-					@file_put_contents(public_path('nfse_doc/') . 'cancelamento_' . $nfseAntiga->chave . '.xml', $xml);
-				}
-				if (!empty($resp->pdf)) {
-					$pdf = base64_decode($resp->pdf);
-					@file_put_contents(public_path('nfse_pdf/') . 'cancelamento_' . $nfseAntiga->chave . '.pdf', $pdf);
-				}
-
+			if (!empty($resp->sucesso)) {
+				$this->sincronizarNovaNFSe($nfseNova, $resp);
+				$this->finalizarNFSeAntiga($nfseAntiga, $nfseNova);
 				return ['status' => 200, 'body' => $resp];
 			}
 
-			$mensagem = $resp->mensagem ?? $resp->erros ?? 'Erro desconhecido na substituição';
-			Log::error('=== ERRO NA SUBSTITUIÇÃO ===', [
-				'resposta' => $resp,
-				'mensagem' => $mensagem
-			]);
+			if ((int)($resp->codigo ?? 0) === 5008 && !empty($resp->chave)) {
+				$consulta = $sdk->consulta(['chave' => $resp->chave]);
+				if (!empty($consulta->sucesso)) {
+					$this->sincronizarNovaNFSe($nfseNova, $consulta);
+					$this->finalizarNFSeAntiga($nfseAntiga, $nfseNova);
+					return ['status' => 200, 'body' => $consulta];
+				}
+			}
 
-			return ['status' => 422, 'body' => ['sucesso' => false, 'mensagem' => $mensagem, 'detalhes' => $resp]];
-		} catch (\Exception $e) {
-			Log::error('=== EXCEÇÃO NA SUBSTITUIÇÃO ===', [
-				'erro' => $e->getMessage(),
-				'linha' => $e->getLine(),
-				'arquivo' => $e->getFile()
-			]);
-
+			return ['status' => 422, 'body' => ['sucesso' => false, 'mensagem' => $resp->mensagem ?? $resp->erros ?? 'Erro na substituição', 'detalhes' => $resp]];
+		} catch (\Throwable $e) {
 			return ['status' => 500, 'body' => ['sucesso' => false, 'mensagem' => 'Erro ao processar substituição: ' . $e->getMessage()]];
 		}
 	}
 
+	private function sincronizarNovaNFSe(Nfse $nfseNova, $retorno): void
+	{
+		$dados = $retorno->nfse ?? $retorno;
+
+		$nfseNova->estado = 'aprovado';
+		$nfseNova->numero_nfse = $dados->numero ?? $nfseNova->numero_nfse;
+		$nfseNova->serie = $dados->serie ?? $nfseNova->serie;
+		$nfseNova->codigo_verificacao = $dados->codigo_verificacao ?? $nfseNova->codigo_verificacao;
+		$nfseNova->chave = $dados->chave ?? $retorno->chave ?? $nfseNova->chave;
+		$nfseNova->url_pdf_nfse = $dados->link_pdf ?? $nfseNova->url_pdf_nfse;
+		$nfseNova->url_xml = $dados->xml ?? $nfseNova->url_xml;
+		$nfseNova->save();
+
+		if (!empty($dados->xml)) {
+			@file_put_contents(public_path('nfse_doc/') . $nfseNova->chave . '.xml', base64_decode($dados->xml));
+		}
+		if (!empty($dados->pdf)) {
+			@file_put_contents(public_path('nfse_pdf/') . $nfseNova->chave . '.pdf', base64_decode($dados->pdf));
+		}
+	}
+
+	private function finalizarNFSeAntiga(Nfse $nfseAntiga, Nfse $nfseNova): void
+	{
+		$nfseAntiga->estado = 'cancelado';
+		$nfseAntiga->cancelado_em = now();
+		$nfseAntiga->chave_referenciada = $nfseNova->chave;
+		$nfseAntiga->save();
+	}
+
 	public function enviarSubstituicao(Request $request)
 	{
-		$business_id = request()->session()->get('user.business_id');
-		$item = Nfse::with('servico')->findOrFail($request->id);
+		$nfseNova = Nfse::with('servico')->findOrFail($request->id);
 
-		if ($item->estado === 'aprovado' && !empty($item->chave)) {
-			// Já está aprovada, vai direto para substituição
-			$nfseAntiga = Nfse::find($item->substituicao_de_id);
-			if (!$nfseAntiga || $nfseAntiga->estado !== 'aprovado') {
-				return response()->json(['sucesso' => false, 'mensagem' => 'NFSe antiga não encontrada ou não está aprovada'], 422);
-			}
-
-			$justificativa = $item->motivo_substituicao ?? 'Substituição de NFSe';
-			$codigoCancelamento = $request->codigo_cancelamento ?? '1';
-
-			$resultSub = $this->executarSubstituicaoAutomatica(
-				$nfseAntiga,
-				$item,
-				$justificativa,
-				$codigoCancelamento
-			);
-
-			if ($resultSub['status'] === 200) {
-				return response()->json([
-					'sucesso' => true,
-					'mensagem' => 'Substituição concluída com sucesso',
-					'nfse_nova' => $item->numero_nfse,
-					'nfse_antiga' => $nfseAntiga->numero_nfse
-				], 200);
-			}
-
-			return response()->json($resultSub['body'], $resultSub['status']);
+		if ($nfseNova->estado === 'cancelado') {
+			return response()->json(['sucesso' => false, 'mensagem' => 'Esta NFSe está cancelada.'], 401);
+		}
+		if (empty($nfseNova->substituicao_de_id)) {
+			return response()->json(['sucesso' => false, 'mensagem' => 'Esta NFSe não é uma substituição.'], 422);
 		}
 
-		if ($item->estado === 'aprovado') return response()->json(['sucesso' => false, 'mensagem' => 'Este documento já está aprovado'], 401);
-		if ($item->estado === 'cancelado') return response()->json(['sucesso' => false, 'mensagem' => 'Este documento está cancelado'], 401);
-		if (empty($item->substituicao_de_id)) return response()->json(['sucesso' => false, 'mensagem' => 'Esta NFSe não é uma substituição'], 422);
-
-		$nfseAntiga = Nfse::find($item->substituicao_de_id);
+		$nfseAntiga = Nfse::find($nfseNova->substituicao_de_id);
 		if (!$nfseAntiga || $nfseAntiga->estado !== 'aprovado') {
-			return response()->json(['sucesso' => false, 'mensagem' => 'NFSe antiga não encontrada ou não está aprovada'], 422);
+			return response()->json(['sucesso' => false, 'mensagem' => 'NFSe original não encontrada ou não aprovada.'], 422);
 		}
 
-		// 1. Transmitir a nova NFSe (reutiliza a lógica do enviar())
-		$requestEnvio = new Request(['id' => $item->id]);
-		$responseEnvio = $this->enviar($requestEnvio);
-		$statusEnvio = $responseEnvio->getStatusCode();
-
-		if ($statusEnvio !== 200) {
-			return $responseEnvio; // Retorna erro da transmissão
-		}
-
-		// Recarrega a nova NFSe para pegar a chave gerada
-		$item->refresh();
-
-		if (empty($item->chave)) {
-			return response()->json(['sucesso' => false, 'mensagem' => 'Nova NFSe transmitida mas sem chave; aguarde processamento'], 202);
-		}
-
-		// 2. Executar substituição na API
-		$justificativa = $item->motivo_substituicao ?? 'Substituição de NFSe';
-		$codigoCancelamento = $request->codigo_cancelamento ?? '1';
-
-		$resultSub = $this->executarSubstituicaoAutomatica(
+		$resultado = $this->executarSubstituicaoAutomatica(
 			$nfseAntiga,
-			$item,
-			$justificativa,
-			$codigoCancelamento
+			$nfseNova,
+			$nfseNova->motivo_substituicao ?? $request->justificativa ?? 'Substituição de NFSe',
+			$request->codigo_cancelamento ?? '1'
 		);
 
-		if ($resultSub['status'] === 200) {
+		if ($resultado['status'] === 200) {
 			return response()->json([
 				'sucesso' => true,
 				'mensagem' => 'Substituição concluída com sucesso',
-				'nfse_nova' => $item->numero_nfse,
-				'nfse_antiga' => $nfseAntiga->numero_nfse
+				'nfse_nova' => $nfseNova->numero_nfse,
+				'nfse_antiga' => $nfseAntiga->numero_nfse,
 			], 200);
 		}
 
-		// Se a substituição falhou, NÃO reverter o estado se já foi aprovada
-		// Apenas logar o erro
-		Log::warning('Substituição falhou mas NFSe foi aprovada', [
-			'nfse_id' => $item->id,
-			'chave' => $item->chave,
-			'estado_atual' => $item->estado,
-			'erro' => $resultSub['body']
-		]);
-
-		return response()->json($resultSub['body'], $resultSub['status']);
+		return response()->json($resultado['body'], $resultado['status']);
 	}
 }
