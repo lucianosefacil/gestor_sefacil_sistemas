@@ -823,7 +823,7 @@ class NfseController extends Controller
 						'valor_csll' => $format2($valorCsll),
 						'outras_retencoes' => $format2($outrasRetencoes),
 						'valor_iss' => $format2($valorIss),
-						'aliquota' => $format2($aliquotaIssPercent),
+						'valor_aliquota' => $format2($aliquotaIssPercent),
 						'desconto_incondicionado' => $format2($descontoIncond),
 						'desconto_condicionado' => $format2($descontoCond),
 					],
@@ -833,7 +833,7 @@ class NfseController extends Controller
 					'municipio_incidencia' => (string)$codigoMunicipioEmitente,
 					'exigibilidade_iss' => (string)($servico->exigibilidade_iss),
 					'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
-					'aliquota_issqn' => $format2($servico->aliquota_issqn),
+					'aliquota_issqn' => $format4($servico->aliquota_issqn),
 					'itens' => [[
 						'codigo' => $itemListaServico,
 						'codigo_cnae' => (string)($servico->codigo_cnae ?? ''),
@@ -842,6 +842,7 @@ class NfseController extends Controller
 						'quantidade' => (string)$quantidadeItem,
 						'valor_unitario' => $format2($valorUnitarioItem),
 						'valor_servicos' => (float)$valorServicos,
+						'valor_aliquota' => $format2($aliquotaIssPercent),
 					]],
 				],
 				'prestador' => [
@@ -1334,6 +1335,7 @@ class NfseController extends Controller
 					'valor_aliquota' => (float)($servico->valor_aliquota ?? 0),
 					'codigo_cnae' => $servico->codigo_cnae,
 					'codigo' => $servico->codigo_servico,
+					'aliquota_issqn' => $servico->aliquota_issqn,
 					'itens' => [[
 						'codigo' => $servico->codigo_servico,
 						'codigo_tributacao_municipio' => $servico->codigo_tributacao_municipio,
@@ -1344,6 +1346,7 @@ class NfseController extends Controller
 						'valor_liquido' => $valorLiquido,
 						'valor_aliquota' => (float)($servico->valor_aliquota ?? 0),
 						'codigo_cnae' => $servico->codigo_cnae,
+						'aliquota_issqn' => $servico->aliquota_issqn,
 					]],
 				],
 			];
@@ -1584,7 +1587,7 @@ class NfseController extends Controller
 		$valorDeducoes = (float)($servico->valor_deducoes ?? 0);
 		$baseCalculo = max($valorServicos - $valorDeducoes, 0);
 		$aliquotaIssPercent = (float)($servico->aliquota_iss ?? 0);
-		$aliquotaIssqnFrac = $aliquotaIssPercent / 100;
+		$aliquotaIssqnFrac = (float)($servico->aliquota_issqn ?? 0);
 		$valorIss = $baseCalculo * $aliquotaIssqnFrac;
 		$valorPis = (float)($servico->valor_pis ?? 0);
 		$valorCofins = (float)($servico->valor_cofins ?? 0);
@@ -1654,7 +1657,7 @@ class NfseController extends Controller
 					'valor_csll' => $format2($valorCsll),
 					'outras_retencoes' => $format2($outrasRetencoes),
 					'valor_iss' => $format2($valorIss),
-					'aliquota' => $format2($aliquotaIssPercent),
+					'valor_aliquota' => $format2($aliquotaIssPercent),
 					'desconto_incondicionado' => $format2($descontoIncond),
 					'desconto_condicionado' => $format2($descontoCond),
 				],
@@ -1664,7 +1667,7 @@ class NfseController extends Controller
 				'municipio_incidencia' => (string)$codigoMunicipioEmitente,
 				'exigibilidade_iss' => (string)($servico->exigibilidade_iss),
 				'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
-				'aliquota_issqn' => $format4($aliquotaIssqnFrac),
+				'aliquota_issqn' => $format4($servico->aliquota_issqn),
 				'itens' => [[
 					'codigo' => $itemListaServico,
 					'codigo_cnae' => (string)($servico->codigo_cnae ?? ''),
@@ -1673,6 +1676,7 @@ class NfseController extends Controller
 					'quantidade' => '1',
 					'valor_unitario' => $format2($valorServicos),
 					'valor_servicos' => (float)$valorServicos,
+					'valor_aliquota' => $format2($aliquotaIssPercent),
 				]],
 			],
 			'prestador' => [
