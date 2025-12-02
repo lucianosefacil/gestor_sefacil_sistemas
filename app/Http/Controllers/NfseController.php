@@ -748,7 +748,7 @@ class NfseController extends Controller
 			$isCpfTomador = strlen($doc) === 11;
 
 			// Competência YYYY-MM
-			$competencia = date('Y-m');
+			$competencia = date('Y-m-d\TH:i:sP', strtotime($servico->data_competencia)) ?? date('Y-m-d\TH:i:sP');
 
 			// Simples Nacional
 			$optanteSimples = ((int)($empresa->regime ?? 1)) === 1;
@@ -1295,7 +1295,7 @@ class NfseController extends Controller
 				'tipo' => '1',
 				'status' => '1',
 				'data_emissao' => date('Y-m-d\TH:i:sP'),
-				'data_competencia' => date('Y-m-d\TH:i:sP'),
+				'data_competencia' => date('Y-m-d\TH:i:sP', strtotime($servico->data_competencia)) ?? date('Y-m-d\TH:i:sP'),
 				'regime_tributacao' => '6',
 				'tomador' => [
 					'cnpj' => strlen($doc) === 14 ? $doc : null,
