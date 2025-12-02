@@ -345,7 +345,7 @@ class NfseController extends Controller
 					'nome_intermediador' => $request->nome_intermediador ?? '',
 					'im_intermediador' => $request->im_intermediador ?? '',
 					'responsavel_retencao_iss' => $request->responsavel_retencao_iss ?? 1,
-
+					'aliquota_issqn' => $request->aliquota_issqn ? str_replace(',', '.', $request->aliquota_issqn) : 0,
 				]);
 			});
 			$output = [
@@ -760,7 +760,7 @@ class NfseController extends Controller
 			$valorDeducoes = (float)($servico->valor_deducoes ?? 0);
 			$baseCalculo = max($valorServicos - $valorDeducoes, 0);
 			$aliquotaIssPercent = (float)($servico->aliquota_iss ?? 0);
-			$aliquotaIssqnFrac = $aliquotaIssPercent / 100; // ex: 2 => 0.02
+			$aliquotaIssqnFrac = (float)($servico->aliquota_issqn ?? 0);
 			$valorIss = $baseCalculo * $aliquotaIssqnFrac;
 			$valorPis = (float)($servico->valor_pis ?? 0);
 			$valorCofins = (float)($servico->valor_cofins ?? 0);
@@ -833,7 +833,7 @@ class NfseController extends Controller
 					'municipio_incidencia' => (string)$codigoMunicipioEmitente,
 					'exigibilidade_iss' => (string)($servico->exigibilidade_iss),
 					'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
-					'aliquota_issqn' => $format4($aliquotaIssqnFrac),
+					'aliquota_issqn' => $format2($servico->aliquota_issqn),
 					'itens' => [[
 						'codigo' => $itemListaServico,
 						'codigo_cnae' => (string)($servico->codigo_cnae ?? ''),
