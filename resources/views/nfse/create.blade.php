@@ -328,13 +328,13 @@
                    value="{{ old('aliquota_csll', isset($item) && $item->servico ? $item->servico->aliquota_csll : '') }}">
           </div>
         </div>
-        {{-- <div class="col-sm-2 col-lg-2">
+        <div class="col-sm-2 col-lg-2">
           <div class="form-group">
             <label>ISSQN (%)</label>
             <input type="text" name="aliquota_issqn" class="form-control money"
                    value="{{ old('aliquota_issqn', isset($item) && $item->servico ? $item->servico->aliquota_issqn : '') }}">
           </div>
-        </div> --}}
+        </div>
       </div>
 
       {{-- Linha 5: Exigibilidade / ISS Retido / Competência (básico) --}}
