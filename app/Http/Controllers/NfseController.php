@@ -1760,7 +1760,7 @@ class NfseController extends Controller
 
 			if (!empty($resp->sucesso) && !empty($dados->numero) && !empty($dados->chave)) {
 				$this->sincronizarNovaNFSe($nfseNova, $resp);
-				$this->finalizarNFSeAntiga($nfseAntiga, $nfseNova);
+				$this->finalizarNFSeAntiga($nfseAntiga, $nfseNova, $resp);
 				return ['status' => 200, 'body' => $resp];
 			}
 
@@ -1770,7 +1770,7 @@ class NfseController extends Controller
 
 				if (!empty($consulta->sucesso) && !empty($dadosConsulta->numero) && !empty($dadosConsulta->chave)) {
 					$this->sincronizarNovaNFSe($nfseNova, $consulta);
-					$this->finalizarNFSeAntiga($nfseAntiga, $nfseNova);
+					$this->finalizarNFSeAntiga($nfseAntiga, $nfseNova, $consulta);
 					return ['status' => 200, 'body' => $consulta];
 				}
 			}
@@ -1816,12 +1816,41 @@ class NfseController extends Controller
 		}
 	}
 
-	private function finalizarNFSeAntiga(Nfse $nfseAntiga, Nfse $nfseNova): void
+	private function finalizarNFSeAntiga(Nfse $nfseAntiga, Nfse $nfseNova, $retorno = null): void
 	{
 		$nfseAntiga->estado = 'cancelado';
 		$nfseAntiga->cancelado_em = now();
 		$nfseAntiga->chave_referenciada = $nfseNova->chave;
 		$nfseAntiga->save();
+
+		if ($retorno) {
+			// Garante pastas
+			if (!is_dir(public_path('nfse_cancelada_doc'))) {
+				@mkdir(public_path('nfse_cancelada_doc'), 0777, true);
+			}
+			if (!is_dir(public_path('nfse_cancelada_xml'))) {
+				@mkdir(public_path('nfse_cancelada_xml'), 0777, true);
+			}
+
+			// Para substituição o provedor costuma retornar PDF/XML de cancelamento
+			// nos campos topo: pdf / xml (mesmo padrão do cancelar()).
+			$pdfCancel = $retorno->pdf ?? null;
+			$xmlCancel = $retorno->xml ?? null;
+
+			if (!empty($pdfCancel)) {
+				@file_put_contents(
+					public_path('nfse_cancelada_doc/') . $nfseAntiga->chave . '.pdf',
+					base64_decode($pdfCancel)
+				);
+			}
+
+			if (!empty($xmlCancel)) {
+				@file_put_contents(
+					public_path('nfse_cancelada_xml/') . $nfseAntiga->chave . '.xml',
+					base64_decode($xmlCancel)
+				);
+			}
+		}
 	}
 
 	public function enviarSubstituicao(Request $request)
