@@ -741,6 +741,16 @@ class NfseController extends Controller
 				$codigoMunicipioEmitente = $city ? (string)$city->codigo : null;
 			}
 
+			$optanteSimples = ((int)($empresa->regime ?? 1)) === 1;
+
+
+			$issRetido = ((int)($servico->iss_retido ?? 0)) === 1; // <<< NOVO
+
+			$codigoMunicipioServico = (string)$codigoMunicipioEmitente; // por enquanto igual
+			$codigoMunicipioIncidencia = (string)$codigoMunicipioEmitente; // pode adaptar depois
+
+			$issDevidoOutroMunicipio = $codigoMunicipioIncidencia !== $codigoMunicipioServico;
+			$deveInformarAliquotaISS = ($issDevidoOutroMunicipio || ($optanteSimples && $issRetido));
 			// Tomador docs
 			$doc = preg_replace('/[^0-9]/', '', (string)$item->documento);
 			$im = preg_replace('/[^0-9]/', '', (string)$item->im);
@@ -751,7 +761,6 @@ class NfseController extends Controller
 			$competencia = $servico->data_competencia ? \Carbon\Carbon::parse($servico->data_competencia)->format('Y-m-d\TH:i:sP') : \Carbon\Carbon::now()->format('Y-m-d\TH:i:sP');
 
 			// Simples Nacional
-			$optanteSimples = ((int)($empresa->regime ?? 1)) === 1;
 			$incentivoFiscal = false;
 			$outrasInfo = '';
 
@@ -797,6 +806,39 @@ class NfseController extends Controller
 			$tokenPrestador = trim((string)$token->token);
 			$codigoAleatorio = str_pad((string)random_int(0, 99999999), 8, '0', STR_PAD_LEFT);
 
+			$valoresServico = [
+				'valor_deducoes'           => $format2($valorDeducoes),
+				'valor_pis'                => $format2($valorPis),
+				'valor_cofins'             => $format2($valorCofins),
+				'valor_inss'               => $format2($valorInss),
+				'valor_ir'                 => $format2($valorIr),
+				'valor_csll'               => $format2($valorCsll),
+				'outras_retencoes'         => $format2($outrasRetencoes),
+				'valor_iss'                => $format2($valorIss),
+				'desconto_incondicionado'  => $format2($descontoIncond),
+				'desconto_condicionado'    => $format2($descontoCond),
+			];
+
+			// Só informa valor_aliquota se cumprir a regra da prefeitura (E221)
+			if ($deveInformarAliquotaISS) { // <<< NOVO
+				$valoresServico['valor_aliquota'] = $format2($aliquotaIssPercent);
+			}
+
+			$itemServico = [
+				'codigo'                     => $itemListaServico,
+				'codigo_cnae'                => (string)($servico->codigo_cnae ?? ''),
+				'codigo_tributacao_municipio' => (string)($servico->codigo_tributacao_municipio ?? ''),
+				'discriminacao'              => $this->retiraAcentos((string)$servico->discriminacao),
+				'quantidade'                 => (string)$quantidadeItem,
+				'valor_unitario'             => $format2($valorUnitarioItem),
+				'valor_servicos'             => (float)$valorServicos,
+			];
+
+			// Só manda valor_aliquota no item se a regra permitir
+			if ($deveInformarAliquotaISS) { // <<< NOVO
+				$itemServico['valor_aliquota'] = $format2($aliquotaIssPercent);
+			}
+
 			$payload = [
 				'numero' => (string)$numero,
 				'serie' => (string)$numeroSerie,
@@ -815,17 +857,8 @@ class NfseController extends Controller
 				'servico' => [
 					'valor_servicos' => $format2($valorServicos),
 					'valores' => [
-						'valor_deducoes' => $format2($valorDeducoes),
-						'valor_pis' => $format2($valorPis),
-						'valor_cofins' => $format2($valorCofins),
-						'valor_inss' => $format2($valorInss),
-						'valor_ir' => $format2($valorIr),
-						'valor_csll' => $format2($valorCsll),
-						'outras_retencoes' => $format2($outrasRetencoes),
-						'valor_iss' => $format2($valorIss),
-						'valor_aliquota' => $format2($aliquotaIssPercent),
-						'desconto_incondicionado' => $format2($descontoIncond),
-						'desconto_condicionado' => $format2($descontoCond),
+						'valor_servicos' => $format2($valorServicos),
+						'valores'        => $valoresServico,
 					],
 					'iss_retido' => ((int)($servico->iss_retido ?? 0)) === 1,
 					'item_lista_servico' => $itemListaServico,
@@ -833,17 +866,26 @@ class NfseController extends Controller
 					'municipio_incidencia' => (string)$codigoMunicipioEmitente,
 					'exigibilidade_iss' => (string)($servico->exigibilidade_iss),
 					'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
-					'aliquota_issqn' => $format4($servico->aliquota_issqn),
-					'itens' => [[
-						'codigo' => $itemListaServico,
-						'codigo_cnae' => (string)($servico->codigo_cnae ?? ''),
-						'codigo_tributacao_municipio' => (string)($servico->codigo_tributacao_municipio ?? ''),
-						'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
-						'quantidade' => (string)$quantidadeItem,
-						'valor_unitario' => $format2($valorUnitarioItem),
-						'valor_servicos' => (float)$valorServicos,
-						'valor_aliquota' => $format2($aliquotaIssPercent),
-					]],
+					// 'aliquota_issqn' => $format4($servico->aliquota_issqn),
+					'aliquota_issqn' => $deveInformarAliquotaISS
+						? $format4($servico->aliquota_issqn)
+						: $format4(0),
+
+
+					// 'itens' => [[
+					// 	'codigo' => $itemListaServico,
+					// 	'codigo_cnae' => (string)($servico->codigo_cnae ?? ''),
+					// 	'codigo_tributacao_municipio' => (string)($servico->codigo_tributacao_municipio ?? ''),
+					// 	'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
+					// 	'quantidade' => (string)$quantidadeItem,
+					// 	'valor_unitario' => $format2($valorUnitarioItem),
+					// 	'valor_servicos' => (float)$valorServicos,
+					// 	'valor_aliquota' => $format2($aliquotaIssPercent),
+					// ]],
+					'itens' => [
+						$itemServico
+					],
+
 				],
 				'prestador' => [
 					'cnpj' => $cnpjPrest,
@@ -949,6 +991,258 @@ class NfseController extends Controller
 			return response()->json(['sucesso' => false, 'mensagem' => $e->getMessage(), 'linha' => $e->getLine()], 500);
 		}
 	}
+
+
+
+		// public function enviar(Request $request)
+	// {
+	// 	$business_id = request()->session()->get('user.business_id');
+	// 	$empresa = Business::where('id', $business_id)->first();
+	// 	$token = NfseConfig::where('empresa_id', $business_id)->first();
+
+
+	// 	$item = Nfse::findOrFail($request->id);
+	// 	if ($item->estado === 'aprovado') return response()->json('Este documento esta aprovado', 401);
+	// 	if ($item->estado === 'cancelado') return response()->json('Este documento esta cancelado', 401);
+
+	// 	if (!is_dir(public_path('nfse_doc'))) @mkdir(public_path('nfse_doc'), 0777, true);
+	// 	if (!is_dir(public_path('nfse_pdf'))) @mkdir(public_path('nfse_pdf'), 0777, true);
+
+	// 	$ambiente = ((int)($empresa->ambiente));
+	// 	$nfse = new NfseSdk([
+	// 		'token' => trim((string) $token->token),
+	// 		'ambiente' => $ambiente,
+	// 		'options' => ['debug' => false, 'timeout' => 60, 'port' => 443, 'http_version' => CURL_HTTP_VERSION_NONE],
+	// 	]);
+
+	// 	$servico = $item->servico;
+
+	// 	try {
+	// 		// Helpers
+	// 		$format2 = function ($v) {
+	// 			return number_format((float)$v, 2, '.', '');
+	// 		};
+	// 		$format4 = function ($v) {
+	// 			return number_format((float)$v, 4, '.', '');
+	// 		};
+
+	// 		// IBGE emitente
+	// 		$codigoMunicipioEmitente = null;
+	// 		if (!empty($token->cidade_id)) {
+	// 			$city = City::find($token->cidade_id);
+	// 			$codigoMunicipioEmitente = $city ? (string)$city->codigo : null;
+	// 		}
+
+	// 		// Tomador docs
+	// 		$doc = preg_replace('/[^0-9]/', '', (string)$item->documento);
+	// 		$im = preg_replace('/[^0-9]/', '', (string)$item->im);
+	// 		$ie = preg_replace('/[^0-9]/', '', (string)$item->ie);
+	// 		$isCpfTomador = strlen($doc) === 11;
+
+	// 		// Competência YYYY-MM
+	// 		$competencia = $servico->data_competencia ? \Carbon\Carbon::parse($servico->data_competencia)->format('Y-m-d\TH:i:sP') : \Carbon\Carbon::now()->format('Y-m-d\TH:i:sP');
+
+	// 		// Simples Nacional
+	// 		$optanteSimples = ((int)($empresa->regime ?? 1)) === 1;
+	// 		$incentivoFiscal = false;
+	// 		$outrasInfo = '';
+
+	// 		// Cálculos
+	// 		$valorServicos = (float)$servico->valor_servico;
+	// 		$valorDeducoes = (float)($servico->valor_deducoes ?? 0);
+	// 		$baseCalculo = max($valorServicos - $valorDeducoes, 0);
+	// 		$aliquotaIssPercent = (float)($servico->aliquota_iss ?? 0);
+	// 		$aliquotaIssqnFrac = (float)($servico->aliquota_issqn ?? 0);
+	// 		$valorIss = $baseCalculo * $aliquotaIssqnFrac;
+	// 		$valorPis = (float)($servico->valor_pis ?? 0);
+	// 		$valorCofins = (float)($servico->valor_cofins ?? 0);
+	// 		$valorInss = (float)($servico->valor_inss ?? 0);
+	// 		$valorIr = (float)($servico->valor_ir ?? 0);
+	// 		$valorCsll = (float)($servico->valor_csll ?? 0);
+	// 		$outrasRetencoes = (float)($servico->outras_retencoes ?? 0);
+	// 		$descontoIncond = (float)($servico->desconto_incondicional ?? 0);
+	// 		$descontoCond = (float)($servico->desconto_condicional ?? 0);
+	// 		$valorLiquidoNfse = $baseCalculo - $valorPis - $valorCofins - $valorInss - $valorIr - $valorCsll - $outrasRetencoes - $descontoIncond - $descontoCond;
+
+	// 		// Itens
+	// 		$itemListaServico = (string)$servico->codigo_servico;
+	// 		$quantidadeItem = 1;
+	// 		$valorUnitarioItem = $valorServicos;
+
+	// 		// Numeração
+	// 		$numero = (int)($empresa->numero_rps ?? 0) + 1;
+	// 		$numeroSerie = (int)($empresa->numero_serie_nfse ?? 1);
+
+	// 		// Prestador (Business)
+	// 		$cnpjPrest = preg_replace('/[^0-9]/', '', (string)$empresa->cnpj);
+	// 		$imPrest = (string)($token->im ?? '');
+	// 		$razaoPrest = (string)($token->razao_social ?? $empresa->name ?? '');
+	// 		$fantasiaPrest = (string)($token->nome ?? $empresa->name ?? '');
+	// 		$telefonePrest = (string)($token->telefone ?? '');
+	// 		$emailPrest = (string)($token->email ?? '');
+	// 		$cepPrest = preg_replace('/[^0-9]/', '', (string)($token->cep ?? ''));
+	// 		$logradouroPrest = (string)($token->rua ?? '');
+	// 		$numeroPrest = (string)($token->numero ?? '');
+	// 		$complPrest = (string)($token->complemento ?? '');
+	// 		$bairroPrest = (string)($token->bairro ?? '');
+	// 		$codigoCnaePrest = (string)($empresa->cnae ?? ($servico->codigo_cnae ?? ''));
+	// 		$tokenPrestador = trim((string)$token->token);
+	// 		$codigoAleatorio = str_pad((string)random_int(0, 99999999), 8, '0', STR_PAD_LEFT);
+
+	// 		$payload = [
+	// 			'numero' => (string)$numero,
+	// 			'serie' => (string)$numeroSerie,
+	// 			'tipo' => '1',
+	// 			'data_emissao' => date('Y-m-d\TH:i:sP'),
+	// 			'competencia' => $competencia,
+	// 			'natureza_operacao' => (string)($item->natureza_operacao ?? '1'),
+	// 			'optante_simples_nacional' => $optanteSimples,
+	// 			'incentivo_fiscal' => $incentivoFiscal,
+	// 			'status' => '1',
+	// 			'outras_informacoes' => $outrasInfo,
+	// 			'valores_nfse' => [
+	// 				'base_calculo' => $format2($baseCalculo),
+	// 				'valor_liquido_nfse' => $format2($valorLiquidoNfse),
+	// 			],
+	// 			'servico' => [
+	// 				'valor_servicos' => $format2($valorServicos),
+	// 				'valores' => [
+	// 					'valor_deducoes' => $format2($valorDeducoes),
+	// 					'valor_pis' => $format2($valorPis),
+	// 					'valor_cofins' => $format2($valorCofins),
+	// 					'valor_inss' => $format2($valorInss),
+	// 					'valor_ir' => $format2($valorIr),
+	// 					'valor_csll' => $format2($valorCsll),
+	// 					'outras_retencoes' => $format2($outrasRetencoes),
+	// 					'valor_iss' => $format2($valorIss),
+	// 					'valor_aliquota' => $format2($aliquotaIssPercent),
+	// 					'desconto_incondicionado' => $format2($descontoIncond),
+	// 					'desconto_condicionado' => $format2($descontoCond),
+	// 				],
+	// 				'iss_retido' => ((int)($servico->iss_retido ?? 0)) === 1,
+	// 				'item_lista_servico' => $itemListaServico,
+	// 				'codigo_municipio' => (string)$codigoMunicipioEmitente,
+	// 				'municipio_incidencia' => (string)$codigoMunicipioEmitente,
+	// 				'exigibilidade_iss' => (string)($servico->exigibilidade_iss),
+	// 				'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
+	// 				'aliquota_issqn' => $format4($servico->aliquota_issqn),
+	// 				'itens' => [[
+	// 					'codigo' => $itemListaServico,
+	// 					'codigo_cnae' => (string)($servico->codigo_cnae ?? ''),
+	// 					'codigo_tributacao_municipio' => (string)($servico->codigo_tributacao_municipio ?? ''),
+	// 					'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
+	// 					'quantidade' => (string)$quantidadeItem,
+	// 					'valor_unitario' => $format2($valorUnitarioItem),
+	// 					'valor_servicos' => (float)$valorServicos,
+	// 					'valor_aliquota' => $format2($aliquotaIssPercent),
+	// 				]],
+	// 			],
+	// 			'prestador' => [
+	// 				'cnpj' => $cnpjPrest,
+	// 				'inscricao_municipal' => $imPrest,
+	// 				'razao_social' => $this->retiraAcentos($razaoPrest),
+	// 				'nome_fantasia' => $this->retiraAcentos($fantasiaPrest),
+	// 				'codigo_cnae' => $codigoCnaePrest,
+	// 				'endereco' => [
+	// 					'logradouro' => $this->retiraAcentos($logradouroPrest),
+	// 					'numero' => $this->retiraAcentos($numeroPrest),
+	// 					'complemento' => $this->retiraAcentos($complPrest),
+	// 					'bairro' => $this->retiraAcentos($bairroPrest),
+	// 					'codigo_municipio' => (string)$codigoMunicipioEmitente,
+	// 					'cep' => $cepPrest,
+	// 				],
+	// 				'contato' => [
+	// 					'telefone' => $telefonePrest,
+	// 					'email' => $emailPrest,
+	// 				],
+	// 				'token' => $tokenPrestador,
+	// 			],
+	// 			'tomador' => [
+	// 				'identificacao_tomador' => $isCpfTomador ? ['cpf' => $doc] : ['cnpj' => $doc],
+	// 				($isCpfTomador ? 'cpf' : 'cnpj') => $doc,
+	// 				'razao_social' => $this->retiraAcentos((string)$item->razao_social),
+	// 				'endereco' => [
+	// 					'logradouro' => $this->retiraAcentos((string)$item->rua),
+	// 					'numero' => $this->retiraAcentos((string)$item->numero),
+	// 					'complemento' => $this->retiraAcentos((string)($item->complemento ?? '')),
+	// 					'bairro' => $this->retiraAcentos((string)$item->bairro),
+	// 					'codigo_municipio' => (string)($item->cidade->codigo ?? ''),
+	// 					'uf' => (string)($item->cidade->uf ?? ''),
+	// 					'cep' => preg_replace('/[^0-9]/', '', (string)$item->cep),
+	// 				],
+	// 				'contato' => [
+	// 					'telefone' => (string)($item->telefone ?? ''),
+	// 					'email' => (string)($item->email ?? ''),
+	// 				],
+	// 			],
+	// 			'orgao_gerador' => [
+	// 				'codigo_municipio' => (string)$codigoMunicipioEmitente,
+	// 			],
+	// 			'nacional' => true,
+	// 			'codigo_aleatorio' => $codigoAleatorio,
+	// 			'token_prestador' => $tokenPrestador,
+	// 		];
+
+	// 		// dd($payload);
+
+	// 		$resp = $nfse->cria($payload);
+
+	// 		if (!empty($resp->sucesso)) {
+	// 			if (isset($resp->chave)) {
+	// 				$item->chave = $resp->chave;
+	// 				$item->save();
+	// 			}
+
+	// 			sleep(10); // muitos provedores processam em background
+
+	// 			$consulta = $nfse->consulta(['chave' => $resp->chave]);
+
+	// 			if (($consulta->codigo ?? null) != 5023) {
+	// 				// dd($consulta);
+	// 				if (!empty($consulta->sucesso)) {
+	// 					$item->estado = 'aprovado';
+	// 					$item->url_pdf_nfse = $consulta->link_pdf ?? '';
+	// 					$item->numero_nfse = $consulta->numero ?? 0;
+	// 					$item->serie = $consulta->serie ?? '';
+	// 					$item->codigo_verificacao = $consulta->codigo_verificacao ?? '';
+	// 					$item->save();
+
+	// 					if (isset($empresa->ultimo_numero_nfse) && !empty($consulta->numero)) {
+	// 						// dd($consulta);
+	// 						$empresa->ultimo_numero_nfse = (int)$consulta->numero;
+	// 						$empresa->numero_rps = (int)$consulta->rps_numero;
+	// 						$empresa->save();
+	// 					}
+	// 					if (!empty($consulta->xml)) {
+	// 						$xml = base64_decode($consulta->xml);
+	// 						@file_put_contents(public_path('nfse_doc/') . $resp->chave . '.xml', $xml);
+	// 					}
+	// 					if (!empty($consulta->pdf)) {
+	// 						$pdf = base64_decode($consulta->pdf);
+	// 						@file_put_contents(public_path('nfse_pdf/') . $resp->chave . '.pdf', $pdf);
+	// 					}
+	// 					return response()->json($consulta, 200);
+	// 				}
+
+	// 				$item->estado = 'rejeitado';
+	// 				$item->save();
+	// 				return response()->json($consulta, 422);
+	// 			}
+
+	// 			$item->estado = 'processando';
+	// 			$item->save();
+	// 			return response()->json($consulta, 202);
+	// 		}
+
+	// 		$item->estado = 'rejeitado';
+	// 		$item->save();
+	// 		return response()->json($resp, 422);
+	// 	} catch (\Throwable $e) {
+	// 		return response()->json(['sucesso' => false, 'mensagem' => $e->getMessage(), 'linha' => $e->getLine()], 500);
+	// 	}
+	// }
+
+	
 
 	private function retiraAcentos($texto)
 	{
