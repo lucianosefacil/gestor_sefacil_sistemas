@@ -17,22 +17,24 @@ use NFePHP\MDFe\Complements;
 error_reporting(E_ALL);
 ini_set('display_errors', 'On');
 
-class MDFeService{
+class MDFeService
+{
 
-	private $config; 
+	private $config;
 	protected $empresa_id = null;
 
-	public function __construct($config, $certificado){
+	public function __construct($config, $certificado)
+	{
 
 		$this->config = json_encode($config);
 		$this->tools = new Tools(json_encode($config), Certificate::readPfx($certificado->certificado, base64_decode($certificado->senha_certificado)));
 		$soapCurl = new SoapCurl();
 		$soapCurl->httpVersion('1.1');
 		$this->tools->loadSoapClass($soapCurl);
-		
 	}
 
-	public function gerar($mdfe){
+	public function gerar($mdfe)
+	{
 		date_default_timezone_set('America/Belem');
 
 		$mdfex = new Make();
@@ -48,8 +50,8 @@ class MDFeService{
 		$std = new \stdClass();
 		$std->cUF = $config->getcUF($config->cidade->uf);
 		$std->tpAmb = (int)$config->ambiente;
-		$std->tpEmit = $mdfe->tp_emit; 
-		
+		$std->tpEmit = $mdfe->tp_emit;
+
 		$cnpj = preg_replace('/[^0-9]/', '', $config->cnpj);
 
 		$cnpjEmitente = $cnpj;
@@ -58,14 +60,14 @@ class MDFeService{
 
 		$mdfeLast = $mdfe->lastMDFe($mdfe);
 
-		if($cnpjEmitente != $doc){
-			$std->tpTransp = $mdfe->tp_transp; 
+		if ($cnpjEmitente != $doc) {
+			$std->tpTransp = $mdfe->tp_transp;
 		}
 
 		$std->mod = '58';
 		$std->serie = $config->numero_serie_mdfe;
 
-		$std->nMDF = $mdfeLast+1; // ver aqui
+		$std->nMDF = $mdfeLast + 1; // ver aqui
 		$std->cMDF = rand(11111111, 99999999);
 		$std->cDV = '0';
 		$std->modal = '1';
@@ -81,14 +83,14 @@ class MDFeService{
 		$mdfex->tagide($std);
 
 
-		foreach($mdfe->municipiosCarregamento as $m){
+		foreach ($mdfe->municipiosCarregamento as $m) {
 			$infMunCarrega = new \stdClass();
 			$infMunCarrega->cMunCarrega = $m->cidade->codigo;
 			$infMunCarrega->xMunCarrega = $m->cidade->nome;
 			$mdfex->taginfMunCarrega($infMunCarrega);
 		}
 
-		foreach($mdfe->percurso as $p){
+		foreach ($mdfe->percurso as $p) {
 
 			$infPercurso = new \stdClass();
 			$infPercurso->UFPer = $p->uf;
@@ -100,9 +102,9 @@ class MDFeService{
 		$cnpj = preg_replace('/[^0-9]/', '', $config->cnpj);
 		$doc = str_replace(" ", "", $cnpj);
 
-		if(strlen($doc) == 11){
+		if (strlen($doc) == 11) {
 			$std->CPF = $doc;
-		}else{
+		} else {
 			$std->CNPJ = $doc;
 		}
 		$std->IE = $config->ie;
@@ -129,27 +131,27 @@ class MDFeService{
 		$infANTT->RNTRC = $mdfe->veiculoTracao->rntrc; // pega antt do veiculo de tracao
 		$mdfex->taginfANTT($infANTT);
 
-		foreach($mdfe->ciots as $c){
+		foreach ($mdfe->ciots as $c) {
 			$infCIOT = new \stdClass();
 			$infCIOT->CIOT = $c->codigo;
 
 			$doc = preg_replace('/[^0-9]/', '', $c->cpf_cnpj);
 
-			if(strlen($doc) == 11) $infCIOT->CPF = $doc;
+			if (strlen($doc) == 11) $infCIOT->CPF = $doc;
 			else $infCIOT->CNPJ = $doc;
-			
-			
+
+
 			$mdfe->taginfCIOT($infCIOT);
 		}
 
-		foreach($mdfe->valesPedagio as $v){
+		foreach ($mdfe->valesPedagio as $v) {
 			$valePed = new \stdClass();
 			$valePed->CNPJForn = $v->cnpj_fornecedor;
 			$doc = preg_replace('/[^0-9]/', '', $v->cnpj_fornecedor_pagador);
 
-			if(strlen($doc) == 11) $valePed->CPFPg = $doc;
+			if (strlen($doc) == 11) $valePed->CPFPg = $doc;
 			else $valePed->CNPJPg = $doc;
-			
+
 			$valePed->nCompra = $v->numero_compra;
 			$valePed->vValePed = $this->format($v->vpopmail_error());
 			$mdfex->tagdisp($valePed);
@@ -158,12 +160,67 @@ class MDFeService{
 		$infContratante = new \stdClass();
 		$doc = preg_replace('/[^0-9]/', '', $mdfe->cnpj_contratante);
 
-		if(strlen($doc) == 11){
+		if (strlen($doc) == 11) {
 			$infContratante->CPF = $doc;
-		}else{
+		} else {
 			$infContratante->CNPJ = $doc;
 		}
 		$mdfex->taginfContratante($infContratante);
+
+
+
+
+
+
+
+
+		$infPag = new \stdClass();
+
+		// Dados do pagador (sua própria empresa)
+		$infPag->CNPJ   = $cnpjEmitente;
+		$infPag->xNome  = $config->razao_social;
+
+		// 0 = à vista | 1 = a prazo
+		$infPag->indPag = 0;
+
+		// Valor TOTAL do contrato de frete (pode ser igual ao vCarga do seu XML)
+		$infPag->vContrato = $mdfe->valor_carga;
+
+		// ==========================
+		// Composição do frete (Comp)
+		// ==========================
+		$comp = new \stdClass();
+
+		// 04 = Frete (conforme NT)
+		$comp->tpComp = '04';
+		$comp->vComp  = $mdfe->valor_carga;
+
+		// Vincula o(s) Comp ao infPag
+		$infPag->Comp = [$comp];
+
+
+		$infBanc = null;
+		// $infBanc = (object)[
+		// 	'codBanco'   => (string)$b->codigo_banco,
+		// 	'codAgencia' => (string)$b->codigo_agencia,
+		// ];
+		$infBanc = (object)[
+			'CNPJIPEF' => $cnpjEmitente,
+		];
+
+
+
+		$infPag->infBanc = $infBanc;
+
+		// Chama as tags do NFePHP (nomes comuns na lib MDFe 3.00)
+		$mdfex->taginfPag($infPag);
+		// $mdfex->tagcomp($comp);
+
+
+
+
+
+
 
 		/* Grupo veicTracao */
 		$veicTracao = new \stdClass();
@@ -177,10 +234,10 @@ class MDFeService{
 		$veicTracao->UF = Business::getUF($mdfe->veiculoTracao->uf);
 
 		$condutor = new \stdClass();
-		$condutor->xNome = $mdfe->condutor_nome; 
+		$condutor->xNome = $mdfe->condutor_nome;
 		$cpf = str_replace(".", "", $mdfe->condutor_cpf);
 		$cpf = str_replace("-", "", $cpf);
-		$condutor->CPF = $cpf; 
+		$condutor->CPF = $cpf;
 		$veicTracao->condutor = [$condutor];
 
 		$prop = new \stdClass();
@@ -189,16 +246,16 @@ class MDFeService{
 		$doc = str_replace(".", "", $doc);
 		$doc = str_replace("/", "", $doc);
 
-		if(strlen($doc) == 11) $prop->CPF = $doc;
+		if (strlen($doc) == 11) $prop->CPF = $doc;
 		else $prop->CNPJ = $doc;
-		
+
 		$prop->RNTRC = $mdfe->veiculoTracao->rntrc;
 		$prop->xNome = $mdfe->veiculoTracao->proprietario_nome;
 		$prop->IE = $mdfe->veiculoTracao->proprietario_ie;
 		$prop->UF = Business::getUF($mdfe->veiculoTracao->proprietario_uf);
 		$prop->tpProp = $mdfe->veiculoTracao->proprietario_tp;
 
-		if($cnpjEmitente != $doc){
+		if ($cnpjEmitente != $doc) {
 			$veicTracao->prop = $prop;
 		}
 
@@ -207,7 +264,7 @@ class MDFeService{
 		/* fim veicTracao */
 
 		/* Grupo veicReboque */
-		if($mdfe->veiculoReboque1){
+		if ($mdfe->veiculoReboque1) {
 			$veicReboque = new \stdClass();
 			$veicReboque->cInt = '02';
 			$placa = str_replace("-", "", $mdfe->veiculoReboque1->placa);
@@ -222,7 +279,7 @@ class MDFeService{
 			$doc = str_replace("-", "", $mdfe->veiculoReboque1->proprietario_documento);
 			$doc = str_replace(".", "", $doc);
 			$doc = str_replace("/", "", $doc);
-			if(strlen($doc) == 11) $prop->CPF = $doc;
+			if (strlen($doc) == 11) $prop->CPF = $doc;
 			else $prop->CNPJ = $doc;
 
 			$prop->RNTRC = $mdfe->veiculoReboque1->rntrc;
@@ -234,7 +291,7 @@ class MDFeService{
 			$mdfex->tagveicReboque($veicReboque);
 		}
 
-		if($mdfe->veiculoReboque2){
+		if ($mdfe->veiculoReboque2) {
 			$veicReboque = new \stdClass();
 			$veicReboque->cInt = '02';
 			$placa = str_replace("-", "", $mdfe->veiculoReboque2->placa);
@@ -249,7 +306,7 @@ class MDFeService{
 			$doc = str_replace("-", "", $mdfe->veiculoReboque2->proprietario_documento);
 			$doc = str_replace(".", "", $doc);
 			$doc = str_replace("/", "", $doc);
-			if(strlen($doc) == 11) $prop->CPF = $doc;
+			if (strlen($doc) == 11) $prop->CPF = $doc;
 			else $prop->CNPJ = $doc;
 
 			$prop->RNTRC = $mdfe->veiculoReboque2->rntrc;
@@ -261,7 +318,7 @@ class MDFeService{
 			$mdfex->tagveicReboque($veicReboque);
 		}
 
-		if($mdfe->veiculoReboque3){
+		if ($mdfe->veiculoReboque3) {
 			$veicReboque = new \stdClass();
 			$veicReboque->cInt = '02';
 			$placa = str_replace("-", "", $mdfe->veiculoReboque3->placa);
@@ -276,7 +333,7 @@ class MDFeService{
 			$doc = str_replace("-", "", $mdfe->veiculoReboque3->proprietario_documento);
 			$doc = str_replace(".", "", $doc);
 			$doc = str_replace("/", "", $doc);
-			if(strlen($doc) == 11) $prop->CPF = $doc;
+			if (strlen($doc) == 11) $prop->CPF = $doc;
 			else $prop->CNPJ = $doc;
 
 			$prop->RNTRC = $mdfe->veiculoReboque3->rntrc;
@@ -289,7 +346,7 @@ class MDFeService{
 		}
 
 		$lacRodo = new \stdClass();
-		$lacRodo->nLacre = $mdfe->lac_rodo;//ver no banco
+		$lacRodo->nLacre = $mdfe->lac_rodo; //ver no banco
 		$mdfex->taglacRodo($lacRodo);
 
 
@@ -297,12 +354,12 @@ class MDFeService{
 		 * Grupo infDoc ( Documentos fiscais )
 		 */
 		$cont = 0;
-		$contNFe = 0; 
-		$contCTe = 0; 
+		$contNFe = 0;
+		$contCTe = 0;
 
 		$infos = $this->unirDescarregamentoCidade($mdfe->infoDescarga);
-		
-		foreach($infos as $key => $info) {
+
+		foreach ($infos as $key => $info) {
 			$infMunDescarga = new \stdClass();
 			$infMunDescarga->cMunDescarga = $info['codigo_cidade'];
 			$infMunDescarga->xMunDescarga = $info['nome_cidade'];
@@ -320,9 +377,9 @@ class MDFeService{
 			$chavesCte = isset($info['chave_cte']) ? explode(";", $info['chave_cte']) : [];
 
 
-			if(sizeof($chavesNfe) > 1 || sizeof($chavesCte) > 1){
-				foreach($chavesNfe as $ch){
-					if($ch){
+			if (sizeof($chavesNfe) > 1 || sizeof($chavesCte) > 1) {
+				foreach ($chavesNfe as $ch) {
+					if ($ch) {
 
 						$std = new \stdClass();
 						$std->chNFe = $ch;
@@ -335,8 +392,8 @@ class MDFeService{
 					}
 				}
 
-				foreach($chavesCte as $ch){
-					if($ch){
+				foreach ($chavesCte as $ch) {
+					if ($ch) {
 						$std = new \stdClass();
 						$std->chCTe = $ch;
 						$std->SegCodBarra = '';
@@ -346,10 +403,9 @@ class MDFeService{
 						$mdfex->taginfCTe($std);
 					}
 				}
+			} else {
 
-			}else{
-				
-				if($info['chave_nfe'] != ""){
+				if ($info['chave_nfe'] != "") {
 					$std = new \stdClass();
 					$std->chNFe = $info['chave_nfe'];
 					$std->SegCodBarra = '';
@@ -358,8 +414,7 @@ class MDFeService{
 					$contNFe++;
 
 					$mdfex->taginfNFe($std);
-
-				}else{
+				} else {
 					/* infCTe */
 					$std = new \stdClass();
 					$std->chCTe = $info['chave_cte'];
@@ -368,7 +423,6 @@ class MDFeService{
 					$std->nItem = $cont;
 					$contCTe++;
 					$mdfex->taginfCTe($std);
-
 				}
 			}
 
@@ -384,7 +438,7 @@ class MDFeService{
 			$lacresTemp = $info['lacresTransp'];
 			array_push($lacres, $lacresTemp);
 
-			
+
 			$stdlacUnidTransp = new \stdClass();
 			$stdlacUnidTransp->nLacre = $lacres;
 
@@ -396,14 +450,13 @@ class MDFeService{
 
 			$unidades = explode(";", $info['id_unidade_carga']);
 
-			if(sizeof($unidades) > 1){
+			if (sizeof($unidades) > 1) {
 				$temp = [];
-				foreach($unidades as $u){
+				foreach ($unidades as $u) {
 					array_push($temp, $u);
 				}
 				$stdinfUnidCarga->idUnidCarga = $temp;
-
-			}else{
+			} else {
 				$stdinfUnidCarga->idUnidCarga = $info['id_unidade_carga'];
 			}
 
@@ -427,13 +480,12 @@ class MDFeService{
 
 
 			$cont++;
-
 		}
 
-		
+
 
 		/* Grupo do Seguro */
-		if($mdfe->seguradora_cnpj != null){
+		if ($mdfe->seguradora_cnpj != null) {
 			$std = new \stdClass();
 			$std->respSeg = '1';
 
@@ -456,19 +508,19 @@ class MDFeService{
 			// die();
 		}
 
-		if($mdfe->produto_pred_nome != ''){
+		if ($mdfe->produto_pred_nome != '') {
 			$prodPred = new \stdClass();
 			$prodPred->tpCarga = $mdfe->tp_carga;
 			$prodPred->xProd = $mdfe->produto_pred_nome;
 
-			if($mdfe->produto_pred_cod_barras != '' && $mdfe->produto_pred_cod_barras > 0){
+			if ($mdfe->produto_pred_cod_barras != '' && $mdfe->produto_pred_cod_barras > 0) {
 				$prodPred->cEAN = $mdfe->produto_pred_cod_barras;
-			}else{
+			} else {
 				$prodPred->cEAN = null;
 			}
-			if($mdfe->produto_pred_ncm != '' && $mdfe->produto_pred_ncm > 0){
+			if ($mdfe->produto_pred_ncm != '' && $mdfe->produto_pred_ncm > 0) {
 				$prodPred->NCM = $mdfe->produto_pred_ncm;
-			}else{
+			} else {
 				$prodPred->NCM = null;
 			}
 
@@ -502,7 +554,7 @@ class MDFeService{
 		$std = new \stdClass();
 		$std->vCarga = $this->format($mdfe->valor_carga);
 		$std->cUnid = '02';
-		if($contNFe > 0){
+		if ($contNFe > 0) {
 			$std->qNFe = $contNFe;
 		}
 		$std->qCTe = $contCTe;
@@ -510,7 +562,7 @@ class MDFeService{
 		$mdfex->tagtot($std);
 		/* fim grupo de totais */
 
-		if($config->aut_xml != ""){
+		if ($config->aut_xml != "") {
 			$std = new \stdClass();
 			$cnpj = str_replace(".", "", $config->aut_xml);
 			$cnpj = str_replace("/", "", $cnpj);
@@ -519,25 +571,24 @@ class MDFeService{
 			$mdfex->tagautXML($std);
 		}
 
-		try{
+		try {
 			$xml = $mdfex->getXML();
 			header("Content-type: text/xml");
 
 			return [
 				'xml' => $xml,
-				'numero' => $mdfeLast+1
+				'numero' => $mdfeLast + 1
 			];
-		}catch(\Exception $e){
+		} catch (\Exception $e) {
 			return ['erros_xml' => $mdfex->getErrors()];
 		}
-
-
 	}
 
-	private function unirDescarregamentoCidade($infos){
+	private function unirDescarregamentoCidade($infos)
+	{
 		$arrInit = [];
 
-		foreach($infos as $i){
+		foreach ($infos as $i) {
 			$temp = [
 				'codigo_cidade' => $i->cidade->codigo,
 				'nome_cidade' => $i->cidade->nome,
@@ -556,18 +607,18 @@ class MDFeService{
 
 
 		$retorno = [];
-		for($i = 0; $i < sizeof($arrInit); $i++){
+		for ($i = 0; $i < sizeof($arrInit); $i++) {
 
 			$indice = $this->verificaDuplicado($retorno, $arrInit[$i]['codigo_cidade']);
-			if($indice == -1){
+			if ($indice == -1) {
 				array_push($retorno, $arrInit[$i]);
-			}else{
+			} else {
 				// $chavesNfe = isset($info['chave_nfe']) ? explode(";", $info['chave_nfe']) : [];
 				// $chavesCte = isset($info['chave_cte']) ? explode(";", $info['chave_cte']) : [];
-				if(isset($arrInit[$i]['chave_nfe'])){
+				if (isset($arrInit[$i]['chave_nfe'])) {
 					$retorno[$indice]['chave_nfe'] .= ";" . $arrInit[$i]['chave_nfe'];
 				}
-				if(isset($arrInit[$i]['chave_cte'])){
+				if (isset($arrInit[$i]['chave_cte'])) {
 					$retorno[$indice]['chave_cte'] .= ";" . $arrInit[$i]['chave_cte'];
 				}
 
@@ -576,11 +627,11 @@ class MDFeService{
 				$temp2 = $arrInit[$i]['lacresTransp'];
 				$lacres = [];
 
-				foreach($temp as $t){
+				foreach ($temp as $t) {
 					array_push($lacres, $t->numero);
 				}
 
-				foreach($temp2 as $t){
+				foreach ($temp2 as $t) {
 					array_push($lacres, $t->numero);
 				}
 				$retorno[$indice]['lacresTransp'] = $lacres;
@@ -591,11 +642,11 @@ class MDFeService{
 				$temp2 = $arrInit[$i]['lacresUnidCarga'];
 				$lacres = [];
 
-				foreach($temp as $t){
+				foreach ($temp as $t) {
 					array_push($lacres, $t->numero);
 				}
 
-				foreach($temp2 as $t){
+				foreach ($temp2 as $t) {
 					array_push($lacres, $t->numero);
 				}
 
@@ -603,9 +654,7 @@ class MDFeService{
 
 				$retorno[$indice]['quantidade_rateio_carga'] +=  $arrInit[$i]['quantidade_rateio_carga'];
 				$retorno[$indice]['quantidade_rateio'] +=  $arrInit[$i]['quantidade_rateio'];
-
 			}
-
 		}
 
 		// echo "<pre>";
@@ -618,24 +667,28 @@ class MDFeService{
 		return $retorno;
 	}
 
-	private function verificaDuplicado($arrInit, $codMun){
+	private function verificaDuplicado($arrInit, $codMun)
+	{
 		$retorno = -1;
-		for($i = 0; $i < sizeof($arrInit); $i++){
-			if($arrInit[$i]['codigo_cidade'] && $arrInit[$i]['codigo_cidade'] == $codMun) $retorno = $i;
+		for ($i = 0; $i < sizeof($arrInit); $i++) {
+			if ($arrInit[$i]['codigo_cidade'] && $arrInit[$i]['codigo_cidade'] == $codMun) $retorno = $i;
 		}
 		return $retorno;
 	}
 
-	public function format($number, $dec = 2){
+	public function format($number, $dec = 2)
+	{
 		return number_format((float) $number, $dec, ".", "");
 	}
 
-	public function sign($xml){
+	public function sign($xml)
+	{
 		return $this->tools->signMDFe($xml);
 	}
-	
-	public function transmitir($signXml, $cnpj){
-		try{
+
+	public function transmitir($signXml, $cnpj)
+	{
+		try {
 			$resp = $this->tools->sefazEnviaLote([$signXml], rand(1, 10000), 1);
 
 			$st = new Standardize();
@@ -645,8 +698,8 @@ class MDFeService{
 
 			if ($std->cStat != 100) {
 				return [
-					'erro' => true, 
-					'message' => $std->xMotivo, 
+					'erro' => true,
+					'message' => $std->xMotivo,
 					'cStat' => $std->cStat
 				];
 			}
@@ -655,10 +708,10 @@ class MDFeService{
 			// $std = $st->toStd($resp);
 
 
-			if(!isset($std->protMDFe)){
+			if (!isset($std->protMDFe)) {
 				return [
-					'erro' => true, 
-					'message' => 'Tente enviar novamente em minutos!', 
+					'erro' => true,
+					'message' => 'Tente enviar novamente em minutos!',
 					'cStat' => '999'
 				];
 			}
@@ -666,40 +719,39 @@ class MDFeService{
 			$chave = $std->protMDFe->infProt->chMDFe;
 			$cStat = $std->protMDFe->infProt->cStat;
 
-			if($cStat == '100'){
+			if ($cStat == '100') {
 
-				if(!is_dir(public_path('xml_mdfe/'.$cnpj))){
-					mkdir(public_path('xml_mdfe/'.$cnpj), 0777, true);
+				if (!is_dir(public_path('xml_mdfe/' . $cnpj))) {
+					mkdir(public_path('xml_mdfe/' . $cnpj), 0777, true);
 				}
 				$xml = Complements::toAuthorize($signXml, $resp);
-				file_put_contents(public_path('xml_mdfe/'.$cnpj.'/'.$chave.'.xml'), $xml);
+				file_put_contents(public_path('xml_mdfe/' . $cnpj . '/' . $chave . '.xml'), $xml);
 
 				return [
-					'chave' => $chave, 
-					'protocolo' => $std->protMDFe->infProt->nProt, 
+					'chave' => $chave,
+					'protocolo' => $std->protMDFe->infProt->nProt,
 					'cStat' => $cStat
 				];
-			}else{
+			} else {
 				return [
-					'erro' => true, 
-					'message' => $std->protMDFe->infProt->xMotivo, 
+					'erro' => true,
+					'message' => $std->protMDFe->infProt->xMotivo,
 					'cStat' => $cStat
 				];
 			}
 			return $std->protMDFe->infProt->chMDFe;
-
-		} catch(\Exception $e){
+		} catch (\Exception $e) {
 			return [
-				'erro' => true, 
+				'erro' => true,
 				'message' => $e->getMessage(),
 				'cStat' => ''
 			];
 		}
+	}
 
-	}	
 
-
-	public function naoEncerrados(){
+	public function naoEncerrados()
+	{
 		try {
 
 			$resp = $this->tools->sefazConsultaNaoEncerrados();
@@ -713,9 +765,10 @@ class MDFeService{
 		}
 	}
 
-	public function encerrar($emitente, $chave, $protocolo){
+	public function encerrar($emitente, $chave, $protocolo)
+	{
 		try {
-			
+
 			$chave = $chave;
 			$nProt = $protocolo;
 			$cUF = Business::getcUF($emitente->cidade->uf);
@@ -732,9 +785,10 @@ class MDFeService{
 		}
 	}
 
-	public function consultar($chave){
+	public function consultar($chave)
+	{
 		try {
-			
+
 			$chave = $chave;
 			$resp = $this->tools->sefazConsultaChave($chave);
 
@@ -747,11 +801,12 @@ class MDFeService{
 		}
 	}
 
-	public function cancelar($chave, $protocolo, $justificativa){
+	public function cancelar($chave, $protocolo, $justificativa)
+	{
 		try {
 			$xJust = $justificativa;
 			$nProt = $protocolo;
-			
+
 			$chave = $chave;
 			$resp = $this->tools->sefazCancela($chave, $xJust, $nProt);
 			sleep(2);
@@ -762,6 +817,4 @@ class MDFeService{
 			echo $e->getMessage();
 		}
 	}
-
-
 }
