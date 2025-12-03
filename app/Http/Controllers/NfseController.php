@@ -1720,101 +1720,6 @@ class NfseController extends Controller
 		];
 	}
 
-	// private function executarSubstituicaoAutomatica(Nfse $nfseAntiga, Nfse $nfseNova, string $justificativa, string $codigoCancelamento = '1'): array
-	// {
-	// 	$business_id = request()->session()->get('user.business_id');
-	// 	$empresa = Business::where('id', $business_id)->first();
-	// 	$token   = NfseConfig::where('empresa_id', $business_id)->first();
-
-	// 	if (!$empresa || !$token) {
-	// 		return ['status' => 401, 'body' => ['sucesso' => false, 'mensagem' => 'Configuração de NFS-e não encontrada para esta empresa.']];
-	// 	}
-
-	// 	if (empty($nfseAntiga->chave)) {
-	// 		return ['status' => 422, 'body' => ['sucesso' => false, 'mensagem' => 'NFSe antiga sem chave; não é possível substituir.']];
-	// 	}
-	// 	if (empty($nfseNova->chave)) {
-	// 		return ['status' => 422, 'body' => ['sucesso' => false, 'mensagem' => 'NFSe nova sem chave; primeiro autorize a nova NFSe.']];
-	// 	}
-
-	// 	if (!is_dir(public_path('nfse_doc'))) @mkdir(public_path('nfse_doc'), 0777, true);
-	// 	if (!is_dir(public_path('nfse_pdf'))) @mkdir(public_path('nfse_pdf'), 0777, true);
-
-	// 	$nfse = new NfseSdk([
-	// 		'token'    => trim((string) $token->token),
-	// 		'ambiente' => (int) $empresa->ambiente,
-	// 		'options'  => [
-	// 			'debug'        => false,
-	// 			'timeout'      => 60,
-	// 			'port'         => 443,
-	// 			'http_version' => CURL_HTTP_VERSION_NONE,
-	// 		],
-	// 	]);
-
-	// 	// IMPORTANTE: Montar o RPS completo da nova nota
-	// 	$payloadRPS = $this->montarPayloadRPS($nfseNova, $empresa, $token, true);
-
-	// 	// Adicionar os dados específicos da substituição
-	// 	$payload = array_merge($payloadRPS, [
-	// 		'chave'              => $nfseAntiga->chave,
-	// 		'codigo_cancelamento' => $codigoCancelamento,
-	// 		'justificativa'      => $justificativa,
-	// 	]);
-
-	// 	Log::info('=== INICIANDO SUBSTITUIÇÃO NFSe ===', [
-	// 		'nfse_antiga_id' => $nfseAntiga->id,
-	// 		'nfse_antiga_numero' => $nfseAntiga->numero_nfse,
-	// 		'nfse_antiga_chave' => $nfseAntiga->chave,
-	// 		'nfse_nova_id' => $nfseNova->id,
-	// 		'nfse_nova_numero' => $nfseNova->numero_nfse,
-	// 		'nfse_nova_chave' => $nfseNova->chave,
-	// 	]);
-
-	// 	Log::info('=== PAYLOAD SUBSTITUIÇÃO COMPLETO ===', $payload);
-
-	// 	try {
-	// 		$resp = $nfse->substitui($payload);
-
-	// 		Log::info('=== RESPOSTA SUBSTITUIÇÃO ===', [
-	// 			'resposta' => $resp
-	// 		]);
-
-	// 		if (!empty($resp->sucesso) && $resp->sucesso === true) {
-	// 			$nfseAntiga->estado             = 'cancelado';
-	// 			$nfseAntiga->cancelado_em       = now();
-	// 			$nfseAntiga->chave_referenciada = $nfseNova->chave;
-	// 			$nfseAntiga->save();
-
-	// 			if (!empty($resp->xml)) {
-	// 				$xml = base64_decode($resp->xml);
-	// 				@file_put_contents(public_path('nfse_doc/') . 'cancelamento_' . $nfseAntiga->chave . '.xml', $xml);
-	// 			}
-	// 			if (!empty($resp->pdf)) {
-	// 				$pdf = base64_decode($resp->pdf);
-	// 				@file_put_contents(public_path('nfse_pdf/') . 'cancelamento_' . $nfseAntiga->chave . '.pdf', $pdf);
-	// 			}
-
-	// 			return ['status' => 200, 'body' => $resp];
-	// 		}
-
-	// 		$mensagem = $resp->mensagem ?? $resp->erros ?? 'Erro desconhecido na substituição';
-	// 		Log::error('=== ERRO NA SUBSTITUIÇÃO ===', [
-	// 			'resposta' => $resp,
-	// 			'mensagem' => $mensagem
-	// 		]);
-
-	// 		return ['status' => 422, 'body' => ['sucesso' => false, 'mensagem' => $mensagem, 'detalhes' => $resp]];
-	// 	} catch (\Exception $e) {
-	// 		Log::error('=== EXCEÇÃO NA SUBSTITUIÇÃO ===', [
-	// 			'erro' => $e->getMessage(),
-	// 			'linha' => $e->getLine(),
-	// 			'arquivo' => $e->getFile()
-	// 		]);
-
-	// 		return ['status' => 500, 'body' => ['sucesso' => false, 'mensagem' => 'Erro ao processar substituição: ' . $e->getMessage()]];
-	// 	}
-	// }
-
 	private function executarSubstituicaoAutomatica(Nfse $nfseAntiga, Nfse $nfseNova, string $justificativa, string $codigoCancelamento = '1'): array
 	{
 		$business_id = request()->session()->get('user.business_id');
@@ -1851,7 +1756,9 @@ class NfseController extends Controller
 		try {
 			$resp = $sdk->substitui($payload);
 
-			if (!empty($resp->sucesso)) {
+			$dados = $resp->nfse ?? $resp;
+
+			if (!empty($resp->sucesso) && !empty($dados->numero) && !empty($dados->chave)) {
 				$this->sincronizarNovaNFSe($nfseNova, $resp);
 				$this->finalizarNFSeAntiga($nfseAntiga, $nfseNova);
 				return ['status' => 200, 'body' => $resp];
@@ -1859,7 +1766,9 @@ class NfseController extends Controller
 
 			if ((int)($resp->codigo ?? 0) === 5008 && !empty($resp->chave)) {
 				$consulta = $sdk->consulta(['chave' => $resp->chave]);
-				if (!empty($consulta->sucesso)) {
+				$dadosConsulta = $consulta->nfse ?? $consulta;
+
+				if (!empty($consulta->sucesso) && !empty($dadosConsulta->numero) && !empty($dadosConsulta->chave)) {
 					$this->sincronizarNovaNFSe($nfseNova, $consulta);
 					$this->finalizarNFSeAntiga($nfseAntiga, $nfseNova);
 					return ['status' => 200, 'body' => $consulta];
@@ -1884,6 +1793,20 @@ class NfseController extends Controller
 		$nfseNova->url_pdf_nfse = $dados->link_pdf ?? $nfseNova->url_pdf_nfse;
 		$nfseNova->url_xml = $dados->xml ?? $nfseNova->url_xml;
 		$nfseNova->save();
+
+		$business_id = request()->session()->get('user.business_id');
+		if ($business_id) {
+			$empresa = Business::find($business_id);
+			if ($empresa) {
+				if (isset($dados->rps_numero)) {
+					$empresa->numero_rps = (int) $dados->rps_numero;
+				}
+				if (isset($dados->numero)) {
+					$empresa->ultimo_numero_nfse = (int) $dados->numero;
+				}
+				$empresa->save();
+			}
+		}
 
 		if (!empty($dados->xml)) {
 			@file_put_contents(public_path('nfse_doc/') . $nfseNova->chave . '.xml', base64_decode($dados->xml));
