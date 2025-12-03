@@ -1602,20 +1602,6 @@ class NfseController extends Controller
 		// Itens
 		$itemListaServico = (string)$servico->codigo_servico;
 
-		// Numeração (usa o número RPS já gerado)
-		// $numero = (int)($empresa->numero_rps ?? 0) + 1;
-		// $numeroSerie = (int)($empresa->numero_serie_nfse ?? 1);
-
-		// Se a nota JÁ está aprovada, usa o número DELA
-		if ($usarNumeroExistente && !empty($nfse->numero_nfse)) {
-			$numero = (int)$nfse->numero_nfse;  // ← Usa o número que ela JÁ TEM (64)
-			$numeroSerie = (int)($nfse->serie ?: $empresa->numero_serie_nfse ?? 1);
-		} else {
-			// Se é nota NOVA, gera novo número
-			$numero = (int)($empresa->numero_rps ?? 0) + 1;  // ← Gera 65, 66, etc
-			$numeroSerie = (int)($empresa->numero_serie_nfse ?? 1);
-		}
-
 		// Prestador
 		$cnpjPrest = preg_replace('/[^0-9]/', '', (string)$empresa->cnpj);
 		$imPrest = (string)($token->im ?? '');
@@ -1631,6 +1617,14 @@ class NfseController extends Controller
 		$codigoCnaePrest = (string)($empresa->cnae ?? ($servico->codigo_cnae ?? ''));
 		$tokenPrestador = trim((string)$token->token);
 		$codigoAleatorio = str_pad((string)random_int(0, 99999999), 8, '0', STR_PAD_LEFT);
+
+		$numero = (!empty($nfse->numero_nfse) && (int)$nfse->numero_nfse > 0)
+			? (int)$nfse->numero_nfse
+			: ((int)($empresa->numero_rps ?? 0) + 1);
+
+		$numeroSerie = !empty($nfse->serie)
+			? (int)$nfse->serie
+			: (int)($empresa->numero_serie_nfse ?? 1);
 
 		return [
 			'numero' => (string)$numero,
@@ -1851,6 +1845,8 @@ class NfseController extends Controller
 				'justificativa' => $justificativa,
 			]
 		);
+
+		// dd($payload);
 
 		try {
 			$resp = $sdk->substitui($payload);
