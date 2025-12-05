@@ -13,6 +13,7 @@ use Illuminate\Support\Str;
 use CloudDfe\SdkPHP\Certificado;
 use App\Models\Business;
 use App\Models\City;
+use Illuminate\Support\Facades\Log;
 
 class NfseConfigController extends Controller
 {
@@ -186,16 +187,28 @@ class NfseConfigController extends Controller
             } else {
                 $payload['cnpj'] = $documento;
             }
-            // dd($payload);
+
+
+            Log::info('NFSe CONFIG - storeSofthouse payload', [
+                'empresa_id' => request()->session()->get('user.business_id'),
+                'payload'    => $payload,
+            ]);
+
             $resp = $softhouse->criaEmitente($payload);
 
-            return $resp;
-
-            Log::info('=== RESPOSTA CRIACAO EMISSOR NFSe (Integra Notas) ===', [
-                'resposta' => $resp
+            Log::info('NFSe CONFIG - storeSofthouse resposta API', [
+                'empresa_id' => request()->session()->get('user.business_id'),
+                'resposta'   => $resp,
             ]);
-            
+
+            return $resp;
         } catch (\Exception $e) {
+            Log::error('NFSe CONFIG - ERRO em storeSofthouse', [
+                'empresa_id' => request()->session()->get('user.business_id'),
+                'mensagem'   => $e->getMessage(),
+                'linha'      => $e->getLine(),
+                'trace'      => $e->getTraceAsString(),
+            ]);
             $output = [
                 'success' => 0,
                 'msg' => 'Algo deu errado: ' . $e->getMessage()
@@ -336,10 +349,22 @@ class NfseConfigController extends Controller
                     $payload['logo'] = base64_encode($file);
                 }
             }
-            // dd($payload);
+
+
+            Log::info('NFSe CONFIG - atualizaSofthouse payload', [
+                'empresa_id' => $item->empresa_id,
+                'payload'    => $payload,
+            ]);
+    
             $resp = $softhouse->atualiza($payload);
-            // dd($resp);
+    
+            Log::info('NFSe CONFIG - atualizaSofthouse resposta API', [
+                'empresa_id' => $item->empresa_id,
+                'resposta'   => $resp,
+            ]);
             return $resp;
+
+            
         } catch (\Exception $e) {
             $output = [
                 'success' => 0,

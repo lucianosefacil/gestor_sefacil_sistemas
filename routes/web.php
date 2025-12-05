@@ -229,7 +229,6 @@ Route::middleware(['authh', 'auth', 'SetSessionData', 'language', 'timezone', 'A
         Route::get('/imprimir/{id}', 'NfseController@imprimir')->name('nfse.imprimir');
         Route::post('/enviar-xml', 'NfseController@enviarXml')->name('nfse.enviarXml');
         Route::post('/store-ajax', 'NfseController@storeAjax')->name('nfse.storeAjax');
-        Route::get('/{id}/imprimir-cancelamento', 'NfseController@imprimirCancelamento')->name('nfse.imprimir_cancelamento');
         Route::get('/{id}/cancelamento/pdf', 'NfseController@imprimirCancelamento')->name('nfse.imprimir_cancelamento');
         Route::get('/{id}/cancelamento/xml', 'NfseController@baixarXmlCancelado')->name('nfse.baixarXmlCancelado');
 
