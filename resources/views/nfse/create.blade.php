@@ -257,7 +257,7 @@
             <select name="cidade_local_prestacao_servico_id" class="form-control @error('cidade_local_prestacao_servico_id') is-invalid @enderror" required>
               @foreach(App\Models\City::all() as $c)
                 <option value="{{ $c->id }}"
-                  @if(old('cidade_local_prestacao_servico_id', isset($item)? $item->cidade_local_prestacao_servico_id : null) == $c->id) selected @endif>
+                  @if(old('cidade_local_prestacao_servico_id', isset($item)? $item->servico->cidade_local_prestacao_servico_id : null) == $c->id) selected @endif>
                   {{ $c->nome }} ({{ $c->uf }})
                 </option>
               @endforeach
