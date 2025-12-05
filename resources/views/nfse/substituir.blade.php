@@ -219,6 +219,20 @@
             </select>
           </div>
         </div>
+
+        <div class="col-sm-4 col-lg-3">
+          <div class="form-group">
+            <label>Município de Prestação de Serviço <span class="text-danger">*</span></label>
+            <select name="cidade_local_prestacao_servico_id" class="form-control @error('cidade_local_prestacao_servico_id') is-invalid @enderror" required>
+              @foreach(App\Models\City::all() as $c)
+                <option value="{{ $c->id }}"
+                  @if(old('cidade_local_prestacao_servico_id', $item->cidade_local_prestacao_servico_id) == $c->id) selected @endif>
+                  {{ $c->nome }} ({{ $c->uf }})
+                </option>
+              @endforeach
+            </select>
+          </div>
+        </div>
       </div>
 
       <hr>
@@ -608,6 +622,7 @@ $(document).ready(function() {
         $('input[name="bairro"]').val(cliente.bairro || cliente.city);
         if (cliente.cidade_id) {
           $('select[name="cidade_id"]').val(cliente.cidade_id).trigger('change');
+          $('select[name="cidade_local_prestacao_servico_id"]').val(cliente.cidade_id).trigger('change');
         }
         toastr.success('Dados do cliente carregados com sucesso!');
       },

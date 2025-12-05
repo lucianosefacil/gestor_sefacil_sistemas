@@ -250,6 +250,22 @@
             </select>
           </div>
         </div>
+
+        <div class="col-sm-4 col-lg-3">
+          <div class="form-group">
+            <label>Município de Prestação de Serviço <span class="text-danger">*</span></label>
+            <select name="cidade_local_prestacao_servico_id" class="form-control @error('cidade_local_prestacao_servico_id') is-invalid @enderror" required>
+              @foreach(App\Models\City::all() as $c)
+                <option value="{{ $c->id }}"
+                  @if(old('cidade_local_prestacao_servico_id', isset($item)? $item->cidade_local_prestacao_servico_id : null) == $c->id) selected @endif>
+                  {{ $c->nome }} ({{ $c->uf }})
+                </option>
+              @endforeach
+            </select>
+          </div>
+        </div>
+
+
       </div>
 
        
@@ -678,6 +694,7 @@ $(document).ready(function() {
                 // Preenche cidade (select)
                 if (cliente.cidade_id) {
                     $('select[name="cidade_id"]').val(cliente.cidade_id).trigger('change');
+                    $('select[name="cidade_local_prestacao_servico_id"]').val(cliente.cidade_id).trigger('change');
                 }
                 
                 // Feedback visual
@@ -701,6 +718,7 @@ $(document).ready(function() {
         $('input[name="numero"]').val('');
         $('input[name="bairro"]').val('');
         $('select[name="cidade_id"]').val('').trigger('change');
+        $('select[name="cidade_local_prestacao_servico_id"]').val('').trigger('change');
     });
     
     // ====================================

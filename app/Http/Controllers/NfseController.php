@@ -328,7 +328,7 @@ class NfseController extends Controller
 					'iss_retido' => $request->iss_retido,
 					'data_competencia' => $request->data_competencia ?? null,
 					'estado_local_prestacao_servico' => $request->estado_local_prestacao_servico ?? '',
-					'cidade_local_prestacao_servico' => $request->cidade_local_prestacao_servico ?? '',
+					'cidade_local_prestacao_servico_id' => $request->cidade_local_prestacao_servico_id ?? '',
 					'valor_deducoes' => $request->valor_deducoes ? str_replace(',', '.', $request->valor_deducoes) : 0,
 					'desconto_incondicional' => $request->desconto_incondicional ? str_replace(',', '.', $request->desconto_incondicional) : 0,
 					'desconto_condicional' => $request->desconto_condicional ? str_replace(',', '.', $request->desconto_condicional) : 0,
@@ -443,7 +443,7 @@ class NfseController extends Controller
 					'iss_retido' => $request->iss_retido,
 					'data_competencia' => $request->data_competencia ?? null,
 					'estado_local_prestacao_servico' => $request->estado_local_prestacao_servico ?? '',
-					'cidade_local_prestacao_servico' => $request->cidade_local_prestacao_servico ?? '',
+					'cidade_local_prestacao_servico_id' => $request->cidade_local_prestacao_servico_id ?? '',
 					'valor_deducoes' => $request->valor_deducoes ? str_replace(',', '.', $request->valor_deducoes) : 0,
 					'desconto_incondicional' => $request->desconto_incondicional ? str_replace(',', '.', $request->desconto_incondicional) : 0,
 					'desconto_condicional' => $request->desconto_condicional ? str_replace(',', '.', $request->desconto_condicional) : 0,
@@ -564,7 +564,7 @@ class NfseController extends Controller
 					'iss_retido' => $request->iss_retido,
 					'data_competencia' => $request->data_competencia ?? null,
 					'estado_local_prestacao_servico' => $request->estado_local_prestacao_servico ?? '',
-					'cidade_local_prestacao_servico' => $request->cidade_local_prestacao_servico ?? '',
+					'cidade_local_prestacao_servico_id' => $request->cidade_local_prestacao_servico_id ?? '',
 					'valor_deducoes' => $request->valor_deducoes ? str_replace(',', '.', $request->valor_deducoes) : 0,
 					'desconto_incondicional' => $request->desconto_incondicional ? str_replace(',', '.', $request->desconto_incondicional) : 0,
 					'desconto_condicional' => $request->desconto_condicional ? str_replace(',', '.', $request->desconto_condicional) : 0,
@@ -742,14 +742,23 @@ class NfseController extends Controller
 			}
 
 			$optanteSimples = ((int)($empresa->regime ?? 1)) === 1;
-
-
 			$issRetido = ((int)($servico->iss_retido ?? 0)) === 1; // <<< NOVO
 
-			$codigoMunicipioServico = (string)$codigoMunicipioEmitente; // por enquanto igual
-			$codigoMunicipioIncidencia = (string)$codigoMunicipioEmitente; // pode adaptar depois
 
-			$issDevidoOutroMunicipio = $codigoMunicipioIncidencia !== $codigoMunicipioServico;
+			$codigoMunicipioPrestacao = null;
+			if (!empty($servico->cidade_local_prestacao_servico_id)) {
+				$city = City::find($servico->cidade_local_prestacao_servico_id);
+				$codigoMunicipioPrestacao = $city ? (string)$city->codigo : null;
+			}
+
+
+			$codigoMunicipioIncidencia = null;
+			if (!empty($servico->cidade_local_prestacao_servico_id)) {
+				$city = City::find($servico->cidade_local_prestacao_servico_id);
+				$codigoMunicipioIncidencia = $city ? (string)$city->codigo : null;
+			}
+
+			$issDevidoOutroMunicipio = $codigoMunicipioIncidencia !== $codigoMunicipioEmitente;
 			$deveInformarAliquotaISS = ($issDevidoOutroMunicipio || ($optanteSimples && $issRetido));
 			// Tomador docs
 			$doc = preg_replace('/[^0-9]/', '', (string)$item->documento);
@@ -862,8 +871,9 @@ class NfseController extends Controller
 					],
 					'iss_retido' => ((int)($servico->iss_retido ?? 0)) === 1,
 					'item_lista_servico' => $itemListaServico,
-					'codigo_municipio' => (string)$codigoMunicipioEmitente,
-					'municipio_incidencia' => (string)$codigoMunicipioEmitente,
+					// 'codigo_municipio' => (string)$codigoMunicipioEmitente,
+					'codigo_municipio'    => (string)($codigoMunicipioPrestacao ?: $codigoMunicipioEmitente),
+					'municipio_incidencia' => (string)$codigoMunicipioIncidencia,
 					'exigibilidade_iss' => (string)($servico->exigibilidade_iss),
 					'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
 					// 'aliquota_issqn' => $format4($servico->aliquota_issqn),
@@ -994,7 +1004,7 @@ class NfseController extends Controller
 
 
 
-		// public function enviar(Request $request)
+	// public function enviar(Request $request)
 	// {
 	// 	$business_id = request()->session()->get('user.business_id');
 	// 	$empresa = Business::where('id', $business_id)->first();
@@ -1242,7 +1252,7 @@ class NfseController extends Controller
 	// 	}
 	// }
 
-	
+
 
 	private function retiraAcentos($texto)
 	{
@@ -1824,7 +1834,7 @@ class NfseController extends Controller
 			'iss_retido'                 => $request->iss_retido,
 			'data_competencia'           => $request->data_competencia ?? null,
 			'estado_local_prestacao_servico' => $request->estado_local_prestacao_servico ?? '',
-			'cidade_local_prestacao_servico' => $request->cidade_local_prestacao_servico ?? '',
+			'cidade_local_prestacao_servico_id' => $request->cidade_local_prestacao_servico_id ?? '',
 			'valor_deducoes'             => $valorDeducoes,
 			'desconto_incondicional'     => $descIncond,
 			'desconto_condicional'       => $descCond,
