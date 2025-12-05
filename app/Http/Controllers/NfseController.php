@@ -702,12 +702,12 @@ class NfseController extends Controller
 		}
 	}
 
+
 	public function enviar(Request $request)
 	{
 		$business_id = request()->session()->get('user.business_id');
 		$empresa = Business::where('id', $business_id)->first();
 		$token = NfseConfig::where('empresa_id', $business_id)->first();
-
 
 		$item = Nfse::findOrFail($request->id);
 		if ($item->estado === 'aprovado') return response()->json('Este documento esta aprovado', 401);
@@ -734,7 +734,9 @@ class NfseController extends Controller
 				return number_format((float)$v, 4, '.', '');
 			};
 
+			// ============================
 			// IBGE emitente
+			// ============================
 			$codigoMunicipioEmitente = null;
 			if (!empty($token->cidade_id)) {
 				$city = City::find($token->cidade_id);
@@ -742,21 +744,44 @@ class NfseController extends Controller
 			}
 
 			$optanteSimples = ((int)($empresa->regime ?? 1)) === 1;
-			$issRetido = ((int)($servico->iss_retido ?? 0)) === 1; // <<< NOVO
+			$issRetido = ((int)($servico->iss_retido ?? 0)) === 1; // <<< JÁ ESTAVA
 
-
-			$codigoMunicipioPrestacao = null;
+			// ============================
+			// MUNICÍPIO DA PRESTAÇÃO (local onde fez o serviço)
+			// ============================
+			$codigoMunicipioPrestacao = null; // <<< NOVO (nome mais claro)
 			if (!empty($servico->cidade_local_prestacao_servico_id)) {
 				$city = City::find($servico->cidade_local_prestacao_servico_id);
 				$codigoMunicipioPrestacao = $city ? (string)$city->codigo : null;
 			}
 
+			// Se não tiver cidade de prestação definida, podemos usar a cidade do tomador
+			$codigoMunicipioTomador = null; // <<< NOVO
+			if (!empty($item->cidade_id) && $item->cidade) {
+				$codigoMunicipioTomador = (string)($item->cidade->codigo ?? '');
+			}
 
-			$codigoMunicipioIncidencia = $codigoMunicipioEmitente;
+			// ============================
+			// MUNICÍPIO DE INCIDÊNCIA (quem recolhe o ISS)
+			// ============================
+			$itemListaServico = (string)$servico->codigo_servico;
+			$codigoMunicipioIncidencia = $this->definirMunicipioIncidencia( // <<< NOVO
+				$itemListaServico,
+				$codigoMunicipioEmitente,
+				$codigoMunicipioPrestacao,
+				$codigoMunicipioTomador
+			);
 
+			// ISS devido a outro município: compara INCIDÊNCIA x LOCAL DA PRESTAÇÃO
+			$issDevidoOutroMunicipio =
+				$codigoMunicipioIncidencia
+				&& $codigoMunicipioPrestacao
+				&& $codigoMunicipioIncidencia !== $codigoMunicipioPrestacao; // <<< AJUSTE
 
-			$issDevidoOutroMunicipio = $codigoMunicipioIncidencia !== $codigoMunicipioEmitente;
-			$deveInformarAliquotaISS = ($issDevidoOutroMunicipio || ($optanteSimples && $issRetido));
+			// Quando ISS é devido a outro município, ou Simples + ISS retido,
+			// a prefeitura exige que a alíquota seja informada.
+			$deveInformarAliquotaISS = ($issDevidoOutroMunicipio || ($optanteSimples && $issRetido)); // <<< AJUSTE
+
 			// Tomador docs
 			$doc = preg_replace('/[^0-9]/', '', (string)$item->documento);
 			$im = preg_replace('/[^0-9]/', '', (string)$item->im);
@@ -764,19 +789,34 @@ class NfseController extends Controller
 			$isCpfTomador = strlen($doc) === 11;
 
 			// Competência YYYY-MM
-			$competencia = $servico->data_competencia ? \Carbon\Carbon::parse($servico->data_competencia)->format('Y-m-d\TH:i:sP') : \Carbon\Carbon::now()->format('Y-m-d\TH:i:sP');
+			$competencia = $servico->data_competencia
+				? \Carbon\Carbon::parse($servico->data_competencia)->format('Y-m-d\TH:i:sP')
+				: \Carbon\Carbon::now()->format('Y-m-d\TH:i:sP');
 
 			// Simples Nacional
 			$incentivoFiscal = false;
 			$outrasInfo = '';
 
-			// Cálculos
+			// ============================
+			// CÁLCULOS DE VALORES
+			// ============================
 			$valorServicos = (float)$servico->valor_servico;
 			$valorDeducoes = (float)($servico->valor_deducoes ?? 0);
 			$baseCalculo = max($valorServicos - $valorDeducoes, 0);
+
+			// aliquota_iss = percentual (ex: 3.44)
+			// aliquota_issqn = fração (ex: 0.0344)
 			$aliquotaIssPercent = (float)($servico->aliquota_iss ?? 0);
 			$aliquotaIssqnFrac = (float)($servico->aliquota_issqn ?? 0);
+
+			// Se não precisa informar alíquota ISS, zera a fração para não gerar valor_iss
+			if (!$deveInformarAliquotaISS) { // <<< NOVO
+				$aliquotaIssPercent = 0;
+				$aliquotaIssqnFrac = 0;
+			}
+
 			$valorIss = $baseCalculo * $aliquotaIssqnFrac;
+
 			$valorPis = (float)($servico->valor_pis ?? 0);
 			$valorCofins = (float)($servico->valor_cofins ?? 0);
 			$valorInss = (float)($servico->valor_inss ?? 0);
@@ -785,10 +825,18 @@ class NfseController extends Controller
 			$outrasRetencoes = (float)($servico->outras_retencoes ?? 0);
 			$descontoIncond = (float)($servico->desconto_incondicional ?? 0);
 			$descontoCond = (float)($servico->desconto_condicional ?? 0);
-			$valorLiquidoNfse = $baseCalculo - $valorPis - $valorCofins - $valorInss - $valorIr - $valorCsll - $outrasRetencoes - $descontoIncond - $descontoCond;
+
+			$valorLiquidoNfse = $baseCalculo
+				- $valorPis
+				- $valorCofins
+				- $valorInss
+				- $valorIr
+				- $valorCsll
+				- $outrasRetencoes
+				- $descontoIncond
+				- $descontoCond;
 
 			// Itens
-			$itemListaServico = (string)$servico->codigo_servico;
 			$quantidadeItem = 1;
 			$valorUnitarioItem = $valorServicos;
 
@@ -812,6 +860,9 @@ class NfseController extends Controller
 			$tokenPrestador = trim((string)$token->token);
 			$codigoAleatorio = str_pad((string)random_int(0, 99999999), 8, '0', STR_PAD_LEFT);
 
+			// ============================
+			// BLOC VALORES SERVIÇO
+			// ============================
 			$valoresServico = [
 				'valor_deducoes'           => $format2($valorDeducoes),
 				'valor_pis'                => $format2($valorPis),
@@ -825,26 +876,25 @@ class NfseController extends Controller
 				'desconto_condicionado'    => $format2($descontoCond),
 			];
 
-			// Só informa valor_aliquota se cumprir a regra da prefeitura (E221)
-			if ($deveInformarAliquotaISS) { // <<< NOVO
+			// Só informa valor_aliquota (Aliquota no XML) se a prefeitura exige
+			if ($deveInformarAliquotaISS) { // <<< AJUSTE
 				$valoresServico['valor_aliquota'] = $format2($aliquotaIssPercent);
 			}
 
+			// Item (estrutura da API)
 			$itemServico = [
-				'codigo'                     => $itemListaServico,
-				'codigo_cnae'                => (string)($servico->codigo_cnae ?? ''),
+				'codigo'                      => $itemListaServico,
+				'codigo_cnae'                 => (string)($servico->codigo_cnae ?? ''),
 				'codigo_tributacao_municipio' => (string)($servico->codigo_tributacao_municipio ?? ''),
-				'discriminacao'              => $this->retiraAcentos((string)$servico->discriminacao),
-				'quantidade'                 => (string)$quantidadeItem,
-				'valor_unitario'             => $format2($valorUnitarioItem),
-				'valor_servicos'             => (float)$valorServicos,
+				'discriminacao'               => $this->retiraAcentos((string)$servico->discriminacao),
+				'quantidade'                  => (string)$quantidadeItem,
+				'valor_unitario'              => $format2($valorUnitarioItem),
+				'valor_servicos'              => (float)$valorServicos,
 			];
 
-			// Só manda valor_aliquota no item se a regra permitir
-			if ($deveInformarAliquotaISS) { // <<< NOVO
-				$itemServico['valor_aliquota'] = $format2($aliquotaIssPercent);
-			}
-
+			// ============================
+			// MONTAGEM DO PAYLOAD
+			// ============================
 			$payload = [
 				'numero' => (string)$numero,
 				'serie' => (string)$numeroSerie,
@@ -868,31 +918,22 @@ class NfseController extends Controller
 					],
 					'iss_retido' => ((int)($servico->iss_retido ?? 0)) === 1,
 					'item_lista_servico' => $itemListaServico,
-					// 'codigo_municipio' => (string)$codigoMunicipioEmitente,
-					'codigo_municipio'    => (string)($codigoMunicipioPrestacao ?: $codigoMunicipioEmitente),
+
+					// Local da prestação (EX: 5201405 - Aparecida) <<< AJUSTE
+					'codigo_municipio'    => (string)$codigoMunicipioPrestacao,
+
+					// Município de incidência (quem recolhe ISS – ex: 5208707 - Goiânia) <<< AJUSTE
 					'municipio_incidencia' => (string)$codigoMunicipioIncidencia,
+
 					'exigibilidade_iss' => (string)($servico->exigibilidade_iss),
 					'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
-					// 'aliquota_issqn' => $format4($servico->aliquota_issqn),
-					'aliquota_issqn' => $deveInformarAliquotaISS
-						? $format4($servico->aliquota_issqn)
-						: $format4(0),
 
+					// Fração da alíquota (0.0200, 0.0344, etc.)
+					'aliquota_issqn' => $format4($aliquotaIssqnFrac), // <<< AJUSTE (já zero quando não precisa)
 
-					// 'itens' => [[
-					// 	'codigo' => $itemListaServico,
-					// 	'codigo_cnae' => (string)($servico->codigo_cnae ?? ''),
-					// 	'codigo_tributacao_municipio' => (string)($servico->codigo_tributacao_municipio ?? ''),
-					// 	'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
-					// 	'quantidade' => (string)$quantidadeItem,
-					// 	'valor_unitario' => $format2($valorUnitarioItem),
-					// 	'valor_servicos' => (float)$valorServicos,
-					// 	'valor_aliquota' => $format2($aliquotaIssPercent),
-					// ]],
 					'itens' => [
 						$itemServico
 					],
-
 				],
 				'prestador' => [
 					'cnpj' => $cnpjPrest,
@@ -955,7 +996,6 @@ class NfseController extends Controller
 				$consulta = $nfse->consulta(['chave' => $resp->chave]);
 
 				if (($consulta->codigo ?? null) != 5023) {
-					// dd($consulta);
 					if (!empty($consulta->sucesso)) {
 						$item->estado = 'aprovado';
 						$item->url_pdf_nfse = $consulta->link_pdf ?? '';
@@ -965,7 +1005,6 @@ class NfseController extends Controller
 						$item->save();
 
 						if (isset($empresa->ultimo_numero_nfse) && !empty($consulta->numero)) {
-							// dd($consulta);
 							$empresa->ultimo_numero_nfse = (int)$consulta->numero;
 							$empresa->numero_rps = (int)$consulta->rps_numero;
 							$empresa->save();
@@ -1001,254 +1040,31 @@ class NfseController extends Controller
 
 
 
-	// public function enviar(Request $request)
-	// {
-	// 	$business_id = request()->session()->get('user.business_id');
-	// 	$empresa = Business::where('id', $business_id)->first();
-	// 	$token = NfseConfig::where('empresa_id', $business_id)->first();
+	// Coloque isso dentro do mesmo controller, fora do método enviar()
+	private function definirMunicipioIncidencia(
+		string $itemListaServico,
+		?string $codigoMunicipioEmitente,
+		?string $codigoMunicipioPrestacao,
+		?string $codigoMunicipioTomador
+	): ?string {
+		// Aqui você vai refinando conforme for mapeando a LC 116
+		switch ($itemListaServico) {
+			case '4.01':
+				// Medicina: no seu cenário, ISS recolhido em Goiânia (emitente)
+				return $codigoMunicipioEmitente;
 
+				// Exemplo de outros casos futuramente:
+				// case '7.02': // Consultoria
+				//     return $codigoMunicipioTomador;
+				//
+				// case '3.05': // Intermediação
+				//     return $codigoMunicipioEmitente;
 
-	// 	$item = Nfse::findOrFail($request->id);
-	// 	if ($item->estado === 'aprovado') return response()->json('Este documento esta aprovado', 401);
-	// 	if ($item->estado === 'cancelado') return response()->json('Este documento esta cancelado', 401);
-
-	// 	if (!is_dir(public_path('nfse_doc'))) @mkdir(public_path('nfse_doc'), 0777, true);
-	// 	if (!is_dir(public_path('nfse_pdf'))) @mkdir(public_path('nfse_pdf'), 0777, true);
-
-	// 	$ambiente = ((int)($empresa->ambiente));
-	// 	$nfse = new NfseSdk([
-	// 		'token' => trim((string) $token->token),
-	// 		'ambiente' => $ambiente,
-	// 		'options' => ['debug' => false, 'timeout' => 60, 'port' => 443, 'http_version' => CURL_HTTP_VERSION_NONE],
-	// 	]);
-
-	// 	$servico = $item->servico;
-
-	// 	try {
-	// 		// Helpers
-	// 		$format2 = function ($v) {
-	// 			return number_format((float)$v, 2, '.', '');
-	// 		};
-	// 		$format4 = function ($v) {
-	// 			return number_format((float)$v, 4, '.', '');
-	// 		};
-
-	// 		// IBGE emitente
-	// 		$codigoMunicipioEmitente = null;
-	// 		if (!empty($token->cidade_id)) {
-	// 			$city = City::find($token->cidade_id);
-	// 			$codigoMunicipioEmitente = $city ? (string)$city->codigo : null;
-	// 		}
-
-	// 		// Tomador docs
-	// 		$doc = preg_replace('/[^0-9]/', '', (string)$item->documento);
-	// 		$im = preg_replace('/[^0-9]/', '', (string)$item->im);
-	// 		$ie = preg_replace('/[^0-9]/', '', (string)$item->ie);
-	// 		$isCpfTomador = strlen($doc) === 11;
-
-	// 		// Competência YYYY-MM
-	// 		$competencia = $servico->data_competencia ? \Carbon\Carbon::parse($servico->data_competencia)->format('Y-m-d\TH:i:sP') : \Carbon\Carbon::now()->format('Y-m-d\TH:i:sP');
-
-	// 		// Simples Nacional
-	// 		$optanteSimples = ((int)($empresa->regime ?? 1)) === 1;
-	// 		$incentivoFiscal = false;
-	// 		$outrasInfo = '';
-
-	// 		// Cálculos
-	// 		$valorServicos = (float)$servico->valor_servico;
-	// 		$valorDeducoes = (float)($servico->valor_deducoes ?? 0);
-	// 		$baseCalculo = max($valorServicos - $valorDeducoes, 0);
-	// 		$aliquotaIssPercent = (float)($servico->aliquota_iss ?? 0);
-	// 		$aliquotaIssqnFrac = (float)($servico->aliquota_issqn ?? 0);
-	// 		$valorIss = $baseCalculo * $aliquotaIssqnFrac;
-	// 		$valorPis = (float)($servico->valor_pis ?? 0);
-	// 		$valorCofins = (float)($servico->valor_cofins ?? 0);
-	// 		$valorInss = (float)($servico->valor_inss ?? 0);
-	// 		$valorIr = (float)($servico->valor_ir ?? 0);
-	// 		$valorCsll = (float)($servico->valor_csll ?? 0);
-	// 		$outrasRetencoes = (float)($servico->outras_retencoes ?? 0);
-	// 		$descontoIncond = (float)($servico->desconto_incondicional ?? 0);
-	// 		$descontoCond = (float)($servico->desconto_condicional ?? 0);
-	// 		$valorLiquidoNfse = $baseCalculo - $valorPis - $valorCofins - $valorInss - $valorIr - $valorCsll - $outrasRetencoes - $descontoIncond - $descontoCond;
-
-	// 		// Itens
-	// 		$itemListaServico = (string)$servico->codigo_servico;
-	// 		$quantidadeItem = 1;
-	// 		$valorUnitarioItem = $valorServicos;
-
-	// 		// Numeração
-	// 		$numero = (int)($empresa->numero_rps ?? 0) + 1;
-	// 		$numeroSerie = (int)($empresa->numero_serie_nfse ?? 1);
-
-	// 		// Prestador (Business)
-	// 		$cnpjPrest = preg_replace('/[^0-9]/', '', (string)$empresa->cnpj);
-	// 		$imPrest = (string)($token->im ?? '');
-	// 		$razaoPrest = (string)($token->razao_social ?? $empresa->name ?? '');
-	// 		$fantasiaPrest = (string)($token->nome ?? $empresa->name ?? '');
-	// 		$telefonePrest = (string)($token->telefone ?? '');
-	// 		$emailPrest = (string)($token->email ?? '');
-	// 		$cepPrest = preg_replace('/[^0-9]/', '', (string)($token->cep ?? ''));
-	// 		$logradouroPrest = (string)($token->rua ?? '');
-	// 		$numeroPrest = (string)($token->numero ?? '');
-	// 		$complPrest = (string)($token->complemento ?? '');
-	// 		$bairroPrest = (string)($token->bairro ?? '');
-	// 		$codigoCnaePrest = (string)($empresa->cnae ?? ($servico->codigo_cnae ?? ''));
-	// 		$tokenPrestador = trim((string)$token->token);
-	// 		$codigoAleatorio = str_pad((string)random_int(0, 99999999), 8, '0', STR_PAD_LEFT);
-
-	// 		$payload = [
-	// 			'numero' => (string)$numero,
-	// 			'serie' => (string)$numeroSerie,
-	// 			'tipo' => '1',
-	// 			'data_emissao' => date('Y-m-d\TH:i:sP'),
-	// 			'competencia' => $competencia,
-	// 			'natureza_operacao' => (string)($item->natureza_operacao ?? '1'),
-	// 			'optante_simples_nacional' => $optanteSimples,
-	// 			'incentivo_fiscal' => $incentivoFiscal,
-	// 			'status' => '1',
-	// 			'outras_informacoes' => $outrasInfo,
-	// 			'valores_nfse' => [
-	// 				'base_calculo' => $format2($baseCalculo),
-	// 				'valor_liquido_nfse' => $format2($valorLiquidoNfse),
-	// 			],
-	// 			'servico' => [
-	// 				'valor_servicos' => $format2($valorServicos),
-	// 				'valores' => [
-	// 					'valor_deducoes' => $format2($valorDeducoes),
-	// 					'valor_pis' => $format2($valorPis),
-	// 					'valor_cofins' => $format2($valorCofins),
-	// 					'valor_inss' => $format2($valorInss),
-	// 					'valor_ir' => $format2($valorIr),
-	// 					'valor_csll' => $format2($valorCsll),
-	// 					'outras_retencoes' => $format2($outrasRetencoes),
-	// 					'valor_iss' => $format2($valorIss),
-	// 					'valor_aliquota' => $format2($aliquotaIssPercent),
-	// 					'desconto_incondicionado' => $format2($descontoIncond),
-	// 					'desconto_condicionado' => $format2($descontoCond),
-	// 				],
-	// 				'iss_retido' => ((int)($servico->iss_retido ?? 0)) === 1,
-	// 				'item_lista_servico' => $itemListaServico,
-	// 				'codigo_municipio' => (string)$codigoMunicipioEmitente,
-	// 				'municipio_incidencia' => (string)$codigoMunicipioEmitente,
-	// 				'exigibilidade_iss' => (string)($servico->exigibilidade_iss),
-	// 				'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
-	// 				'aliquota_issqn' => $format4($servico->aliquota_issqn),
-	// 				'itens' => [[
-	// 					'codigo' => $itemListaServico,
-	// 					'codigo_cnae' => (string)($servico->codigo_cnae ?? ''),
-	// 					'codigo_tributacao_municipio' => (string)($servico->codigo_tributacao_municipio ?? ''),
-	// 					'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
-	// 					'quantidade' => (string)$quantidadeItem,
-	// 					'valor_unitario' => $format2($valorUnitarioItem),
-	// 					'valor_servicos' => (float)$valorServicos,
-	// 					'valor_aliquota' => $format2($aliquotaIssPercent),
-	// 				]],
-	// 			],
-	// 			'prestador' => [
-	// 				'cnpj' => $cnpjPrest,
-	// 				'inscricao_municipal' => $imPrest,
-	// 				'razao_social' => $this->retiraAcentos($razaoPrest),
-	// 				'nome_fantasia' => $this->retiraAcentos($fantasiaPrest),
-	// 				'codigo_cnae' => $codigoCnaePrest,
-	// 				'endereco' => [
-	// 					'logradouro' => $this->retiraAcentos($logradouroPrest),
-	// 					'numero' => $this->retiraAcentos($numeroPrest),
-	// 					'complemento' => $this->retiraAcentos($complPrest),
-	// 					'bairro' => $this->retiraAcentos($bairroPrest),
-	// 					'codigo_municipio' => (string)$codigoMunicipioEmitente,
-	// 					'cep' => $cepPrest,
-	// 				],
-	// 				'contato' => [
-	// 					'telefone' => $telefonePrest,
-	// 					'email' => $emailPrest,
-	// 				],
-	// 				'token' => $tokenPrestador,
-	// 			],
-	// 			'tomador' => [
-	// 				'identificacao_tomador' => $isCpfTomador ? ['cpf' => $doc] : ['cnpj' => $doc],
-	// 				($isCpfTomador ? 'cpf' : 'cnpj') => $doc,
-	// 				'razao_social' => $this->retiraAcentos((string)$item->razao_social),
-	// 				'endereco' => [
-	// 					'logradouro' => $this->retiraAcentos((string)$item->rua),
-	// 					'numero' => $this->retiraAcentos((string)$item->numero),
-	// 					'complemento' => $this->retiraAcentos((string)($item->complemento ?? '')),
-	// 					'bairro' => $this->retiraAcentos((string)$item->bairro),
-	// 					'codigo_municipio' => (string)($item->cidade->codigo ?? ''),
-	// 					'uf' => (string)($item->cidade->uf ?? ''),
-	// 					'cep' => preg_replace('/[^0-9]/', '', (string)$item->cep),
-	// 				],
-	// 				'contato' => [
-	// 					'telefone' => (string)($item->telefone ?? ''),
-	// 					'email' => (string)($item->email ?? ''),
-	// 				],
-	// 			],
-	// 			'orgao_gerador' => [
-	// 				'codigo_municipio' => (string)$codigoMunicipioEmitente,
-	// 			],
-	// 			'nacional' => true,
-	// 			'codigo_aleatorio' => $codigoAleatorio,
-	// 			'token_prestador' => $tokenPrestador,
-	// 		];
-
-	// 		// dd($payload);
-
-	// 		$resp = $nfse->cria($payload);
-
-	// 		if (!empty($resp->sucesso)) {
-	// 			if (isset($resp->chave)) {
-	// 				$item->chave = $resp->chave;
-	// 				$item->save();
-	// 			}
-
-	// 			sleep(10); // muitos provedores processam em background
-
-	// 			$consulta = $nfse->consulta(['chave' => $resp->chave]);
-
-	// 			if (($consulta->codigo ?? null) != 5023) {
-	// 				// dd($consulta);
-	// 				if (!empty($consulta->sucesso)) {
-	// 					$item->estado = 'aprovado';
-	// 					$item->url_pdf_nfse = $consulta->link_pdf ?? '';
-	// 					$item->numero_nfse = $consulta->numero ?? 0;
-	// 					$item->serie = $consulta->serie ?? '';
-	// 					$item->codigo_verificacao = $consulta->codigo_verificacao ?? '';
-	// 					$item->save();
-
-	// 					if (isset($empresa->ultimo_numero_nfse) && !empty($consulta->numero)) {
-	// 						// dd($consulta);
-	// 						$empresa->ultimo_numero_nfse = (int)$consulta->numero;
-	// 						$empresa->numero_rps = (int)$consulta->rps_numero;
-	// 						$empresa->save();
-	// 					}
-	// 					if (!empty($consulta->xml)) {
-	// 						$xml = base64_decode($consulta->xml);
-	// 						@file_put_contents(public_path('nfse_doc/') . $resp->chave . '.xml', $xml);
-	// 					}
-	// 					if (!empty($consulta->pdf)) {
-	// 						$pdf = base64_decode($consulta->pdf);
-	// 						@file_put_contents(public_path('nfse_pdf/') . $resp->chave . '.pdf', $pdf);
-	// 					}
-	// 					return response()->json($consulta, 200);
-	// 				}
-
-	// 				$item->estado = 'rejeitado';
-	// 				$item->save();
-	// 				return response()->json($consulta, 422);
-	// 			}
-
-	// 			$item->estado = 'processando';
-	// 			$item->save();
-	// 			return response()->json($consulta, 202);
-	// 		}
-
-	// 		$item->estado = 'rejeitado';
-	// 		$item->save();
-	// 		return response()->json($resp, 422);
-	// 	} catch (\Throwable $e) {
-	// 		return response()->json(['sucesso' => false, 'mensagem' => $e->getMessage(), 'linha' => $e->getLine()], 500);
-	// 	}
-	// }
-
+			default:
+				// Padrão: incide no emitente
+				return $codigoMunicipioEmitente;
+		}
+	}
 
 
 	private function retiraAcentos($texto)
@@ -1297,18 +1113,21 @@ class NfseController extends Controller
 	public function consultar(Request $request)
 	{
 		$business_id = request()->session()->get('user.business_id');
-		$config = Business::where('id', $business_id)
-			->first();
-
-		Connection::getInstance()->setBearerToken($config->token_nfse);
+		$config = Business::where('id', $business_id)->first();
+		$token = NfseConfig::where('empresa_id', $business_id)->first();
 		$item = Nfse::findOrFail($request->id);
-		$nfse = new NFSe();
 
-		$nfse->uuid = $item->uuid;
+		// usar a classe da Webmania (NFSeWeb), não o model App\Models\Nfse
+		$nfse = new NfseSdk([
+			'token' => $token->token,
+			'ambiente' => $config->ambiente,
+			'options' => ['debug' => false, 'timeout' => 60, 'port' => 443, 'http_version' => CURL_HTTP_VERSION_NONE],
+		]);
+
 		try {
-			$response = $nfse->consultar();
-			$object = json_decode($response->getMessage());
-			// return response()->json($object, 401);
+			$response = $nfse->consulta(['chave' => $item->chave]);
+
+			$object = $response->info_nfse[0];
 
 			if (isset($object->info_nfse)) {
 				$object = $object->info_nfse[0];
@@ -1319,34 +1138,35 @@ class NfseController extends Controller
 				if (isset($object->pdf_nfse)) {
 					$item->url_pdf_nfse = $object->pdf_nfse;
 				}
-				$item->url_pdf_rps = $object->pdf_rps;
-				$item->url_xml = $object->xml;
-				$item->numero_nfse = $object->numero;
-				$item->uuid = $object->uuid;
+				$item->url_pdf_rps = $object->pdf_rps ?? null;
+				$item->url_xml = $object->xml ?? null;
+				$item->numero_nfse = $object->numero ?? null;
+				$item->uuid = $object->uuid ?? $item->uuid;
 				$item->estado = 'aprovado';
 				$item->save();
-				$xml = file_get_contents($item->url_xml);
-				file_put_contents(public_path('nfse_doc/') . "$item->uuid.xml", $xml);
+
+				if (!empty($item->url_xml)) {
+					$xml = file_get_contents($item->url_xml);
+					file_put_contents(public_path('nfse_doc/') . "$item->uuid.xml", $xml);
+				}
 			}
 
-			if ($object->status == "reprovado") {
+			if (($object->status ?? null) == "reprovado") {
 				$item->estado = 'rejeitado';
 				$item->save();
-
-				return response()->json($object->motivo[0], 401);
+				return response()->json($object, 401);
 			}
 
-			if ($object->status == "cancelado") {
+			if (($object->status ?? null) == "cancelado") {
 				$item->estado = 'cancelado';
 				$item->save();
 			}
 
-			return response()->json($response->getMessage(), 200);
+			// retorno mais simples para ver o resultado no console do navegador
+			return response()->json($object, 200);
 		} catch (\Throwable $th) {
-			// response((object) [ 'exception' => $th->getMessage() ]);
 			return response()->json($th->getMessage(), 401);
 		} catch (APIException $a) {
-			// response((object) [ 'error' => $a->getMessage() ]);
 			return response()->json($a->getMessage(), 401);
 		}
 	}
@@ -1459,13 +1279,143 @@ class NfseController extends Controller
 	public function imprimirCancelamento($id)
 	{
 		$nota = Nfse::findOrFail($id);
+
+		if (!empty($nota->cancelamento_pdf_path)) {
+			$fullPath = public_path($nota->cancelamento_pdf_path);
+			if (file_exists($fullPath)) {
+				return response()->file($fullPath);
+			}
+		}
 		// usa a chave exatamente como foi salva no cancelar()/finalizarNFSeAntiga()
-		$fullPath = public_path('nfse_cancelada_doc/' . $nota->chave . '.pdf');
+		$this->sincronizarCancelamentoViaConsulta($nota);
+
+		if (!empty($nota->cancelamento_pdf_path)) {
+			$fullPath = public_path($nota->cancelamento_pdf_path);
+		} else {
+			// fallback: padrão antigo usando chave limpa
+			$chaveLimpa = preg_replace('/[^0-9]/', '', $nota->chave);
+			$fullPath = public_path('nfse_cancelada_doc/' . $chaveLimpa . '.pdf');
+		}
+
 		if (!file_exists($fullPath)) {
 			abort(404, 'PDF de cancelamento não encontrado');
 		}
 
-		return response()->file($fullPath); // abre no navegador
+		return response()->file($fullPath);
+	}
+
+	private function sincronizarCancelamentoViaConsulta(Nfse $nota): void
+	{
+		// Se já tem chave, tenta consultar na Integra Notas
+		if (empty($nota->chave)) {
+			return;
+		}
+
+		$business_id = request()->session()->get('user.business_id');
+		if (!$business_id) {
+			return;
+		}
+
+		$empresa = Business::find($business_id);
+		$token   = NfseConfig::where('empresa_id', $business_id)->first();
+
+		if (!$empresa || !$token) {
+			return;
+		}
+
+		try {
+			$sdk = new NfseSdk([
+				'token'   => trim((string)$token->token),
+				'ambiente' => (int)$empresa->ambiente,
+				'options' => [
+					'debug'        => false,
+					'timeout'      => 60,
+					'port'         => 443,
+					'http_version' => CURL_HTTP_VERSION_NONE,
+				],
+			]);
+
+			// Consulta pela CHAVE da NFSe (já cancelada por substituição)
+			$resp  = $sdk->consulta(['chave' => $nota->chave]);
+			$dados = $resp->nfse ?? $resp;
+
+			Log::info('NFSE CANCELAMENTO - Consulta para sincronizar cancelamento', [
+				'nfse_id'   => $nota->id,
+				'chave'     => $nota->chave,
+				'top_keys'  => is_object($resp)  ? array_keys(get_object_vars($resp)) : null,
+				'nfse_keys' => (is_object($dados)) ? array_keys(get_object_vars($dados)) : null,
+			]);
+
+			// Na resposta que você mostrou, o XML do cancelamento vem em "xml"
+			// e o PDF é acessado via link (link_pdf). Alguns provedores também
+			// retornam "pdf" em base64 – então tentamos nas duas formas.
+			$pdfBase64 = $dados->pdf  ?? $resp->pdf  ?? null;
+			$xmlBase64 = $dados->xml  ?? $resp->xml  ?? null;
+			$linkPdf   = $dados->link_pdf ?? $resp->link_pdf ?? null;
+
+			// Garante pastas
+			if (!is_dir(public_path('nfse_cancelada_doc'))) {
+				@mkdir(public_path('nfse_cancelada_doc'), 0777, true);
+			}
+			if (!is_dir(public_path('nfse_cancelada_xml'))) {
+				@mkdir(public_path('nfse_cancelada_xml'), 0777, true);
+			}
+			if (!is_dir(public_path('nfse_cancelada_log'))) {
+				@mkdir(public_path('nfse_cancelada_log'), 0777, true);
+			}
+
+			$chaveLimpa = preg_replace('/[^0-9]/', '', $nota->chave);
+
+			// Salvar XML de cancelamento (vem em base64 na resposta que você mandou)
+			if (!empty($xmlBase64)) {
+				$xmlPathRel = 'nfse_cancelada_xml/' . $chaveLimpa . '.xml';
+				@file_put_contents(public_path($xmlPathRel), base64_decode($xmlBase64));
+				$nota->cancelamento_xml_path = $xmlPathRel;
+			}
+
+			// Salvar PDF de cancelamento:
+			// 1) se vier "pdf" em base64, usa direto
+			if (!empty($pdfBase64)) {
+				$pdfPathRel = 'nfse_cancelada_doc/' . $chaveLimpa . '.pdf';
+				@file_put_contents(public_path($pdfPathRel), base64_decode($pdfBase64));
+				$nota->cancelamento_pdf_path = $pdfPathRel;
+			}
+			// 2) se só vier "link_pdf" (URL), você pode manter o link na NFSe
+			//    e opcionalmente baixar o PDF dessa URL no futuro, se precisar.
+			if (!empty($linkPdf) && empty($nota->cancelamento_pdf_path)) {
+				// aqui apenas guardamos o link para referência (se tiver campo pra isso)
+				// se não tiver coluna específica, pode ignorar ou usar um campo de log
+				// ex: $nota->cancelamento_mensagem = 'link_pdf: '.$linkPdf;
+			}
+
+			// Campos básicos de controle (opcional)
+			$nota->cancelamento_codigo      = $resp->codigo   ?? $nota->cancelamento_codigo;
+			$nota->cancelamento_mensagem    = $resp->mensagem ?? $nota->cancelamento_mensagem;
+			$nota->cancelamento_data_evento = !empty($resp->data_hora_evento)
+				? \Carbon\Carbon::parse($resp->data_hora_evento)
+				: $nota->cancelamento_data_evento;
+
+			// Log bruto da resposta para debug
+			$logPathRel = 'nfse_cancelada_log/' . $chaveLimpa . '.json';
+			@file_put_contents(public_path($logPathRel), json_encode($resp));
+			$nota->cancelamento_log_path = $logPathRel;
+
+			$nota->save();
+
+			Log::info('NFSE CANCELAMENTO - Arquivos de cancelamento sincronizados via consulta', [
+				'nfse_id'   => $nota->id,
+				'pdf_path'  => $nota->cancelamento_pdf_path ?? null,
+				'xml_path'  => $nota->cancelamento_xml_path ?? null,
+				'link_pdf'  => $linkPdf ?? null,
+			]);
+		} catch (\Throwable $e) {
+			Log::error('NFSE CANCELAMENTO - Erro ao consultar/sincronizar cancelamento', [
+				'nfse_id'  => $nota->id ?? null,
+				'chave'    => $nota->chave ?? null,
+				'mensagem' => $e->getMessage(),
+				'linha'    => $e->getLine(),
+			]);
+		}
 	}
 
 	private function prepareUFs()
@@ -2077,10 +2027,20 @@ class NfseController extends Controller
 		try {
 			$resp = $sdk->substitui($payload);
 
-			Log::info('NFSE SUBSTITUICAO - Resposta da API na substituição', [
-				'nfse_nova_id'    => $nfseNova->id,
-				'nfse_antiga_id'  => $nfseAntiga->id,
-				'resposta'        => $resp,
+			dd($resp);
+
+			Log::info('NFSE SUBSTITUICAO - DEBUG estrutura retorno substitui', [
+				'tipo'          => gettype($resp),
+				'top_keys'      => is_object($resp) ? array_keys(get_object_vars($resp)) : null,
+				'has_nfse'      => (is_object($resp) && isset($resp->nfse)),
+				'nfse_keys'     => (is_object($resp) && isset($resp->nfse) && is_object($resp->nfse))
+					? array_keys(get_object_vars($resp->nfse))
+					: null,
+				// flags pra saber se tem pdf/xml em cada nível
+				'has_pdf_top'   => (is_object($resp) && isset($resp->pdf)),
+				'has_xml_top'   => (is_object($resp) && isset($resp->xml)),
+				'has_pdf_nfse'  => (is_object($resp) && isset($resp->nfse) && is_object($resp->nfse) && isset($resp->nfse->pdf)),
+				'has_xml_nfse'  => (is_object($resp) && isset($resp->nfse) && is_object($resp->nfse) && isset($resp->nfse->xml)),
 			]);
 
 			$dados = $resp->nfse ?? $resp;
