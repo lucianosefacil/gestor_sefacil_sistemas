@@ -1764,6 +1764,15 @@ class NfseController extends Controller
 			return $nova;
 		});
 
+		Log::info('NFSE SUBSTITUICAO - Nova NFSe criada para substituição', [
+			'empresa_id'      => $business_id,
+			'nfse_antiga_id'  => $nfseAntiga->id,
+			'nfse_antiga_num' => $nfseAntiga->numero_nfse,
+			'nfse_nova_id'    => $nfseNova->id,
+			'nfse_nova_num'   => $nfseNova->numero_nfse,
+			'estado_nova'     => $nfseNova->estado,
+		]);
+
 		return redirect()->route('nfse.index')->with('status', [
 			'success' => 1,
 			'msg'     => 'Nova NFSe criada para substituição (#' . $nfseNova->id . '). Edite ou transmita na lista normalmente.',
@@ -2058,19 +2067,57 @@ class NfseController extends Controller
 
 		// dd($payload);
 
+		Log::info('NFSE SUBSTITUICAO - Payload enviado para Integra Notas', [
+			'nfse_nova_id'    => $nfseNova->id,
+			'nfse_nova_num'   => $nfseNova->numero_nfse,
+			'nfse_antiga_id'  => $nfseAntiga->id,
+			'nfse_antiga_num' => $nfseAntiga->numero_nfse,
+			'payload'         => $payload,
+		]);
+
+
 		try {
 			$resp = $sdk->substitui($payload);
+
+			Log::info('NFSE SUBSTITUICAO - Resposta da API na substituição', [
+				'nfse_nova_id'    => $nfseNova->id,
+				'nfse_antiga_id'  => $nfseAntiga->id,
+				'resposta'        => $resp,
+			]);
 
 			$dados = $resp->nfse ?? $resp;
 
 			if (!empty($resp->sucesso) && !empty($dados->numero) && !empty($dados->chave)) {
+
+				Log::info('NFSE SUBSTITUICAO - Sucesso direto na API', [
+					'nfse_nova_id'    => $nfseNova->id,
+					'nfse_nova_num'   => $dados->numero ?? null,
+					'chave_nova'      => $dados->chave ?? null,
+					'nfse_antiga_id'  => $nfseAntiga->id,
+					'chave_antiga'    => $nfseAntiga->chave,
+				]);
+
 				$this->sincronizarNovaNFSe($nfseNova, $resp);
 				$this->finalizarNFSeAntiga($nfseAntiga, $nfseNova, $resp);
 				return ['status' => 200, 'body' => $resp];
 			}
 
 			if ((int)($resp->codigo ?? 0) === 5008 && !empty($resp->chave)) {
+
+				Log::warning('NFSE SUBSTITUICAO - NFSe já existe na API (5008), consultando...', [
+					'nfse_nova_id'   => $nfseNova->id,
+					'chave_informada' => $resp->chave,
+				]);
+
+
 				$consulta = $sdk->consulta(['chave' => $resp->chave]);
+
+				Log::info('NFSE SUBSTITUICAO - Resposta consulta após 5008', [
+					'nfse_nova_id' => $nfseNova->id,
+					'consulta'     => $consulta,
+				]);
+
+
 				$dadosConsulta = $consulta->nfse ?? $consulta;
 
 				if (!empty($consulta->sucesso) && !empty($dadosConsulta->numero) && !empty($dadosConsulta->chave)) {
@@ -2080,8 +2127,25 @@ class NfseController extends Controller
 				}
 			}
 
+			Log::warning('NFSE SUBSTITUICAO - Falha na substituição', [
+				'nfse_nova_id'   => $nfseNova->id,
+				'nfse_antiga_id' => $nfseAntiga->id,
+				'codigo'         => $resp->codigo ?? null,
+				'mensagem'       => $resp->mensagem ?? null,
+				'erros'          => $resp->erros ?? null,
+			]);
+
 			return ['status' => 422, 'body' => ['sucesso' => false, 'mensagem' => $resp->mensagem ?? $resp->erros ?? 'Erro na substituição', 'detalhes' => $resp]];
 		} catch (\Throwable $e) {
+
+			Log::error('NFSE SUBSTITUICAO - Exceção ao chamar API', [
+				'nfse_nova_id'   => $nfseNova->id ?? null,
+				'nfse_antiga_id' => $nfseAntiga->id ?? null,
+				'mensagem'       => $e->getMessage(),
+				'linha'          => $e->getLine(),
+				'trace'          => $e->getTraceAsString(),
+			]);
+
 			return ['status' => 500, 'body' => ['sucesso' => false, 'mensagem' => 'Erro ao processar substituição: ' . $e->getMessage()]];
 		}
 	}
@@ -2089,6 +2153,21 @@ class NfseController extends Controller
 	private function sincronizarNovaNFSe(Nfse $nfseNova, $retorno): void
 	{
 		$dados = $retorno->nfse ?? $retorno;
+
+		Log::info('NFSE SUBSTITUICAO - Sincronizando nova NFSe aprovada', [
+			'nfse_nova_id'    => $nfseNova->id,
+			'antes' => [
+				'estado'      => $nfseNova->estado,
+				'numero_nfse' => $nfseNova->numero_nfse,
+				'serie'       => $nfseNova->serie,
+			],
+			'depois' => [
+				'numero'      => $dados->numero ?? null,
+				'serie'       => $dados->serie ?? null,
+				'chave'       => $dados->chave ?? ($retorno->chave ?? null),
+			],
+		]);
+
 
 		$nfseNova->estado = 'aprovado';
 		$nfseNova->numero_nfse = $dados->numero ?? $nfseNova->numero_nfse;
@@ -2102,6 +2181,17 @@ class NfseController extends Controller
 		$business_id = request()->session()->get('user.business_id');
 		if ($business_id) {
 			$empresa = Business::find($business_id);
+
+
+			if ($business_id && isset($empresa)) {
+				Log::info('NFSE SUBSTITUICAO - Atualizando contadores da empresa', [
+					'empresa_id'          => $empresa->id,
+					'novo_numero_rps'     => $empresa->numero_rps ?? null,
+					'novo_ultimo_nfse'    => $empresa->ultimo_numero_nfse ?? null,
+				]);
+			}
+
+
 			if ($empresa) {
 				if (isset($dados->rps_numero)) {
 					$empresa->numero_rps = (int) $dados->rps_numero;
@@ -2127,6 +2217,23 @@ class NfseController extends Controller
 		$nfseAntiga->cancelado_em = now();
 		$nfseAntiga->chave_referenciada = $nfseNova->chave;
 
+
+		Log::info('NFSE SUBSTITUICAO - Atualizando NFSe antiga como cancelada', [
+			'nfse_antiga_id'   => $nfseAntiga->id,
+			'nfse_antiga_num'  => $nfseAntiga->numero_nfse,
+			'chave_antiga'     => $nfseAntiga->chave,
+			'chave_referenciada' => $nfseAntiga->chave_referenciada,
+			'antes'            => [
+				'estado'        => $antes['estado'] ?? null,
+				'cancelado_em'  => $antes['cancelado_em'] ?? null,
+			],
+			'depois'           => [
+				'estado'        => $nfseAntiga->estado,
+				'cancelado_em'  => $nfseAntiga->cancelado_em,
+			],
+		]);
+
+
 		if ($retorno) {
 			// Garante pastas
 			if (!is_dir(public_path('nfse_cancelada_doc'))) {
@@ -2141,6 +2248,14 @@ class NfseController extends Controller
 
 			// Usa chave limpa para manter padrão com imprimirCancelamento()
 			$chaveLimpa = preg_replace('/[^0-9]/', '', $nfseAntiga->chave);
+
+
+			Log::info('NFSE SUBSTITUICAO - Salvando arquivos de cancelamento da NFSe antiga', [
+				'nfse_antiga_id' => $nfseAntiga->id,
+				'pdf_path'       => !empty($pdfCancel) ? 'nfse_cancelada_doc/' . $chaveLimpa . '.pdf' : null,
+				'xml_path'       => !empty($xmlCancel) ? 'nfse_cancelada_xml/' . $chaveLimpa . '.xml' : null,
+			]);
+			
 
 			$pdfCancel = $retorno->pdf ?? null;
 			$xmlCancel = $retorno->xml ?? null;
@@ -2188,6 +2303,14 @@ class NfseController extends Controller
 		if (!$nfseAntiga || $nfseAntiga->estado !== 'aprovado') {
 			return response()->json(['sucesso' => false, 'mensagem' => 'NFSe original não encontrada ou não aprovada.'], 422);
 		}
+
+		Log::info('NFSE SUBSTITUICAO - Enviando substituição para API', [
+			'nfse_nova_id'    => $nfseNova->id,
+			'nfse_nova_num'   => $nfseNova->numero_nfse,
+			'nfse_antiga_id'  => $nfseAntiga->id,
+			'nfse_antiga_num' => $nfseAntiga->numero_nfse,
+			'justificativa'   => $nfseNova->motivo_substituicao ?? $request->justificativa ?? null,
+		]);
 
 		$resultado = $this->executarSubstituicaoAutomatica(
 			$nfseAntiga,
