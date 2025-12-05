@@ -190,6 +190,11 @@ class NfseConfigController extends Controller
             $resp = $softhouse->criaEmitente($payload);
 
             return $resp;
+
+            Log::info('=== RESPOSTA CRIACAO EMISSOR NFSe (Integra Notas) ===', [
+                'resposta' => $resp
+            ]);
+            
         } catch (\Exception $e) {
             $output = [
                 'success' => 0,
