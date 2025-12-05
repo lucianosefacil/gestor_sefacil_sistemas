@@ -1462,13 +1462,12 @@ class NfseController extends Controller
 	public function imprimirCancelamento($id)
 	{
 		$nota = Nfse::findOrFail($id);
-		$chave = preg_replace('/[^0-9]/', '', $nota->chave);
-		$fullPath = public_path('nfse_cancelada_doc/' . $chave . '.pdf');
-
+		// usa a chave exatamente como foi salva no cancelar()/finalizarNFSeAntiga()
+		$fullPath = public_path('nfse_cancelada_doc/' . $nota->chave . '.pdf');
 		if (!file_exists($fullPath)) {
 			abort(404, 'PDF de cancelamento não encontrado');
 		}
-		// dd($fullPath);
+
 		return response()->file($fullPath); // abre no navegador
 	}
 
