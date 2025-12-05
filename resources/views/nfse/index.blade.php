@@ -154,14 +154,19 @@
 								@endif
 
                 {{-- Botão de debug: ver payload antes de transmitir --}}
-                @if(in_array($n->estado, ['novo','rejeitado']))
+                {{-- @if(in_array($n->estado, ['novo','rejeitado']))
                 <a  title="Prévia técnica (payload NFSe)"
                     target="_blank"
                     href="{{ route('nfse.preview_payload', $n->id) }}"
                     class="btn btn-secondary btn-sm">
                   <i class="fa fa-code"></i>
                 </a>
-                @endif
+                @endif --}}
+
+                {{-- <a title="Consultar NFSe" class="btn btn-info btn-sm" onclick="consultar('{{ $n->id }}')">
+                  <i class="fa fa-search"></i>
+                </a> --}}
+
 								{{-- <a title="Clonar" class="btn btn-primary btn-sm" href="/nfse/clone/{{$n->id}}">
 								<i class="fa fa-copy"></i>
 								</a> --}}
@@ -327,6 +332,23 @@ function cancelar() {
   .catch((e) => {
     if (window.swal) swal({ title: 'Erro', text: e.message, type: 'error' });
   });
+}
+
+function consultar(id) {
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+  const url = '{{ route('nfse.consultar') }}';
+  fetch(url, {
+    method: 'POST',
+    body: JSON.stringify({ id }),
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-CSRF-TOKEN': csrf
+    }
+  })
+    .then(response => response.json())
+    .then(data => console.log(data))
+    .catch(error => console.error('Error:', error));
 }
 
 </script>
