@@ -752,11 +752,8 @@ class NfseController extends Controller
 			}
 
 
-			$codigoMunicipioIncidencia = null;
-			if (!empty($servico->cidade_local_prestacao_servico_id)) {
-				$city = City::find($servico->cidade_local_prestacao_servico_id);
-				$codigoMunicipioIncidencia = $city ? (string)$city->codigo : null;
-			}
+			$codigoMunicipioIncidencia = $codigoMunicipioEmitente;
+
 
 			$issDevidoOutroMunicipio = $codigoMunicipioIncidencia !== $codigoMunicipioEmitente;
 			$deveInformarAliquotaISS = ($issDevidoOutroMunicipio || ($optanteSimples && $issRetido));
@@ -2255,7 +2252,7 @@ class NfseController extends Controller
 				'pdf_path'       => !empty($pdfCancel) ? 'nfse_cancelada_doc/' . $chaveLimpa . '.pdf' : null,
 				'xml_path'       => !empty($xmlCancel) ? 'nfse_cancelada_xml/' . $chaveLimpa . '.xml' : null,
 			]);
-			
+
 
 			$pdfCancel = $retorno->pdf ?? null;
 			$xmlCancel = $retorno->xml ?? null;
