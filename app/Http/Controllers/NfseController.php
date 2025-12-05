@@ -1462,12 +1462,14 @@ class NfseController extends Controller
 	public function imprimirCancelamento($id)
 	{
 		$nota = Nfse::findOrFail($id);
-		if (!$nota->cancelamento_pdf_path || !file_exists(public_path($nota->cancelamento_pdf_path))) {
+		$chave = preg_replace('/[^0-9]/', '', $nota->chave);
+		$fullPath = public_path('nfse_cancelada_doc/' . $chave . '.pdf');
+
+		if (!file_exists($fullPath)) {
 			abort(404, 'PDF de cancelamento não encontrado');
 		}
-		$fullPath = public_path($nota->cancelamento_pdf_path);
+		// dd($fullPath);
 		return response()->file($fullPath); // abre no navegador
-		// ou ->download($fullPath, "cancelamento_nfse_{$nota->numero}.pdf");
 	}
 
 	private function prepareUFs()
@@ -2125,7 +2127,6 @@ class NfseController extends Controller
 		$nfseAntiga->estado = 'cancelado';
 		$nfseAntiga->cancelado_em = now();
 		$nfseAntiga->chave_referenciada = $nfseNova->chave;
-		$nfseAntiga->save();
 
 		if ($retorno) {
 			// Garante pastas
@@ -2135,26 +2136,42 @@ class NfseController extends Controller
 			if (!is_dir(public_path('nfse_cancelada_xml'))) {
 				@mkdir(public_path('nfse_cancelada_xml'), 0777, true);
 			}
+			if (!is_dir(public_path('nfse_cancelada_log'))) {
+				@mkdir(public_path('nfse_cancelada_log'), 0777, true);
+			}
 
-			// Para substituição o provedor costuma retornar PDF/XML de cancelamento
-			// nos campos topo: pdf / xml (mesmo padrão do cancelar()).
+			// Usa chave limpa para manter padrão com imprimirCancelamento()
+			$chaveLimpa = preg_replace('/[^0-9]/', '', $nfseAntiga->chave);
+
 			$pdfCancel = $retorno->pdf ?? null;
 			$xmlCancel = $retorno->xml ?? null;
 
 			if (!empty($pdfCancel)) {
-				@file_put_contents(
-					public_path('nfse_cancelada_doc/') . $nfseAntiga->chave . '.pdf',
-					base64_decode($pdfCancel)
-				);
+				$pdfPathRel = 'nfse_cancelada_doc/' . $chaveLimpa . '.pdf';
+				@file_put_contents(public_path($pdfPathRel), base64_decode($pdfCancel));
+				$nfseAntiga->cancelamento_pdf_path = $pdfPathRel;
 			}
 
 			if (!empty($xmlCancel)) {
-				@file_put_contents(
-					public_path('nfse_cancelada_xml/') . $nfseAntiga->chave . '.xml',
-					base64_decode($xmlCancel)
-				);
+				$xmlPathRel = 'nfse_cancelada_xml/' . $chaveLimpa . '.xml';
+				@file_put_contents(public_path($xmlPathRel), base64_decode($xmlCancel));
+				$nfseAntiga->cancelamento_xml_path = $xmlPathRel;
 			}
+
+			// Campos de controle do cancelamento
+			$nfseAntiga->cancelamento_codigo      = $retorno->codigo   ?? $nfseAntiga->cancelamento_codigo;
+			$nfseAntiga->cancelamento_mensagem    = $retorno->mensagem ?? $nfseAntiga->cancelamento_mensagem;
+			$nfseAntiga->cancelamento_data_evento = !empty($retorno->data_evento)
+				? \Carbon\Carbon::parse($retorno->data_evento)
+				: $nfseAntiga->cancelamento_data_evento;
+
+			// Log bruto do retorno (opcional)
+			$logPathRel = 'nfse_cancelada_log/' . $chaveLimpa . '.json';
+			@file_put_contents(public_path($logPathRel), json_encode($retorno));
+			$nfseAntiga->cancelamento_log_path = $logPathRel;
 		}
+
+		$nfseAntiga->save();
 	}
 
 	public function enviarSubstituicao(Request $request)

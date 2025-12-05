@@ -141,9 +141,16 @@
                 </a>
 
 								@else
+
+                @if($n->estado == 'cancelado')
+                <a title="Visualizar NFSe Cancelada" target="_blank" href="{{ route('nfse.imprimir_cancelamento', $n->id) }}">
+                  <i class="fa fa-print"></i>
+                </a>
+                @else
 								<a target="_blank" title="Visualizar temporário" class="btn btn-info btn-sm" href="/nfse/preview-xml/{{$n->id}}">
 								  <i class="fa fa-file-excel"></i>
 								</a>
+                @endif
 								@endif
 								{{-- <a title="Clonar" class="btn btn-primary btn-sm" href="/nfse/clone/{{$n->id}}">
 								<i class="fa fa-copy"></i>
