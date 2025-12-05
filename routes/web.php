@@ -234,6 +234,7 @@ Route::middleware(['authh', 'auth', 'SetSessionData', 'language', 'timezone', 'A
 
         Route::get('/{id}/substituicao', 'NfseController@substituicaoForm')->name('nfse.substituicao.form');
         Route::post('/{id}/salvar-substituicao', 'NfseController@substituirSalvar')->name('nfse.substituir.salvar');
+        Route::get('/{id}/preview-payload', 'NfseController@previewPayload')->name('nfse.preview_payload');
     });
 
     Route::group(['prefix' => '/nfse-config'], function () {

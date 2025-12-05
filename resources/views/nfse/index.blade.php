@@ -152,6 +152,16 @@
 								</a>
                 @endif
 								@endif
+
+                {{-- Botão de debug: ver payload antes de transmitir --}}
+                @if(in_array($n->estado, ['novo','rejeitado']))
+                <a  title="Prévia técnica (payload NFSe)"
+                    target="_blank"
+                    href="{{ route('nfse.preview_payload', $n->id) }}"
+                    class="btn btn-secondary btn-sm">
+                  <i class="fa fa-code"></i>
+                </a>
+                @endif
 								{{-- <a title="Clonar" class="btn btn-primary btn-sm" href="/nfse/clone/{{$n->id}}">
 								<i class="fa fa-copy"></i>
 								</a> --}}
