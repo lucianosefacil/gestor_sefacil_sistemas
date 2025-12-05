@@ -1866,7 +1866,7 @@ class NfseController extends Controller
 	private function montarPayloadRPS(Nfse $nfse, Business $empresa, NfseConfig $token, bool $usarNumeroExistente = false): array
 	{
 		$servico = $nfse->servico;
-
+		
 		// Helpers
 		$format2 = function ($v) {
 			return number_format((float)$v, 2, '.', '');
@@ -1882,6 +1882,7 @@ class NfseController extends Controller
 			$codigoMunicipioEmitente = $city ? (string)$city->codigo : null;
 		}
 
+		
 		// Tomador docs
 		$doc = preg_replace('/[^0-9]/', '', (string)$nfse->documento);
 		$isCpfTomador = strlen($doc) === 11;
@@ -2326,5 +2327,58 @@ class NfseController extends Controller
 		}
 
 		return response()->json($resultado['body'], $resultado['status']);
+	}
+
+	public function previewPayload($id)
+	{
+		$business_id = request()->session()->get('user.business_id');
+
+		$nfse    = Nfse::with('servico', 'cidade')
+			->where('empresa_id', $business_id)
+			->findOrFail($id);
+
+		$empresa = Business::findOrFail($business_id);
+		$token   = NfseConfig::where('empresa_id', $business_id)->firstOrFail();
+
+		// Mesmo payload que será usado na transmissão
+		$payload = $this->montarPayloadRPS($nfse, $empresa, $token, false);
+
+		// Se quiser só JSON (recomendo para debug):
+		return response()->json([
+			'nfse_id'   => $nfse->id,
+			'numero'    => $nfse->numero_nfse,
+			'estado'    => $nfse->estado,
+			'payload'   => $payload,
+		], 200, [], JSON_PRETTY_PRINT);
+
+		// Se preferir XML “simulado”, pode trocar por:
+		/*
+    $xml = $this->arrayToXml('Rps', $payload);
+    return response($xml, 200)->header('Content-Type', 'application/xml');
+    */
+	}
+
+	/**
+	 * Helper opcional para gerar XML de leitura (não é o XML oficial da Integra Notas).
+	 */
+	private function arrayToXml(string $root, array $data): string
+	{
+		$xml = new \SimpleXMLElement("<{$root}/>");
+
+		$add = function ($value, \SimpleXMLElement $node) use (&$add) {
+			foreach ($value as $key => $val) {
+				$key = is_numeric($key) ? 'item' : $key;
+				if (is_array($val)) {
+					$child = $node->addChild($key);
+					$add($val, $child);
+				} else {
+					$node->addChild($key, htmlspecialchars((string)$val));
+				}
+			}
+		};
+
+		$add($data, $xml);
+
+		return $xml->asXML();
 	}
 }
