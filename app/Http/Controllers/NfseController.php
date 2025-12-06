@@ -839,7 +839,7 @@ class NfseController extends Controller
 				$aliquotaIssqnFrac = 0;
 			}
 
-			$valorIss = $baseCalculo * $aliquotaIssqnFrac;
+			$valorIss = $baseCalculo * ($aliquotaIssqnFrac / 100);
 
 			$valorPis = (float)($servico->valor_pis ?? 0);
 			$valorCofins = (float)($servico->valor_cofins ?? 0);
