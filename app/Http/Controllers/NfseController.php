@@ -800,11 +800,11 @@ class NfseController extends Controller
 			$deveInformarAliquotaISS = true;
 
 			// Exceções onde pode ser 0%
-			if ($isMei) {
-				$deveInformarAliquotaISS = false;
-			} elseif ($codigoMunicipioIncidencia === $codigoMunicipioEmitente) {
-				$deveInformarAliquotaISS = false;
-			}
+			// if ($isMei) {
+			// 	$deveInformarAliquotaISS = false;
+			// } elseif ($codigoMunicipioIncidencia === $codigoMunicipioEmitente) {
+			// 	$deveInformarAliquotaISS = false;
+			// }
 
 			// Tomador docs
 			$doc = preg_replace('/[^0-9]/', '', (string)$item->documento);
@@ -834,10 +834,10 @@ class NfseController extends Controller
 			$aliquotaIssqnFrac = (float)($servico->aliquota_issqn ?? 0);
 
 			// Se não precisa informar alíquota ISS, zera a fração para não gerar valor_iss
-			if (!$deveInformarAliquotaISS) { // <<< NOVO
-				$aliquotaIssPercent = 0;
-				$aliquotaIssqnFrac = 0;
-			}
+			// if (!$deveInformarAliquotaISS) { // <<< NOVO
+			// 	$aliquotaIssPercent = 0;
+			// 	$aliquotaIssqnFrac = 0;
+			// }
 
 			$valorIss = $baseCalculo * ($aliquotaIssqnFrac / 100);
 
@@ -1064,7 +1064,6 @@ class NfseController extends Controller
 
 
 
-	// Coloque isso dentro do mesmo controller, fora do método enviar()
 	private function definirMunicipioIncidencia(
 		string $itemListaServico,
 		?string $codigoMunicipioEmitente,
@@ -2326,8 +2325,6 @@ class NfseController extends Controller
 
 		$servico = $item->servico;
 
-		// === MESMA LÓGICA DO MÉTODO ENVIAR() (APENAS A PARTE DO PAYLOAD) ===
-
 		// Helpers
 		$format2 = function ($v) {
 			return number_format((float)$v, 2, '.', '');
@@ -2391,11 +2388,11 @@ class NfseController extends Controller
 		$deveInformarAliquotaISS = true;
 
 		// Exceções onde pode ser 0%
-		if ($isMei) {
-			$deveInformarAliquotaISS = false;
-		} elseif ($codigoMunicipioIncidencia === $codigoMunicipioEmitente) {
-			$deveInformarAliquotaISS = false;
-		}
+		// if ($isMei) {
+		// 	$deveInformarAliquotaISS = false;
+		// } elseif ($codigoMunicipioIncidencia === $codigoMunicipioEmitente) {
+		// 	$deveInformarAliquotaISS = false;
+		// }
 
 		// Tomador docs
 		$doc = preg_replace('/[^0-9]/', '', (string)$item->documento);
@@ -2425,12 +2422,11 @@ class NfseController extends Controller
 		$aliquotaIssqnFrac = (float)($servico->aliquota_issqn ?? 0);
 
 		// Se não precisa informar alíquota ISS, zera a fração para não gerar valor_iss
-		if (!$deveInformarAliquotaISS) {
-			$aliquotaIssPercent = 0;
-			$aliquotaIssqnFrac = 0;
-		}
+		// if (!$deveInformarAliquotaISS) {
+		// 	$aliquotaIssPercent = 0;
+		// 	$aliquotaIssqnFrac = 0;
+		// }
 
-		// ATENÇÃO: mesma fórmula do enviar()
 		$valorIss = $baseCalculo * ($aliquotaIssqnFrac / 100);
 
 		$valorPis = (float)($servico->valor_pis ?? 0);
@@ -2589,7 +2585,6 @@ class NfseController extends Controller
 			'token_prestador' => $tokenPrestador,
 		];
 
-		// === FIM DA CÓPIA DO ENVIAR() ===
 
 		return response()->json([
 			'nfse_id' => $item->id,
