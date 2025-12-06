@@ -747,7 +747,7 @@ class NfseController extends Controller
 			$regime = strtolower(trim((string)($token->regime ?? 'simples')));
 			$optanteSimples = $regime === 'simples';
 
-			if($regime === 'simples') {
+			if ($regime === 'simples') {
 				$optanteSimples = true;
 			} else {
 				$optanteSimples = false;
@@ -2326,8 +2326,9 @@ class NfseController extends Controller
 
 		$servico = $item->servico;
 
-		// === COPIA DA LÓGICA DO MÉTODO ENVIAR() (apenas a parte do payload) ===
+		// === MESMA LÓGICA DO MÉTODO ENVIAR() (APENAS A PARTE DO PAYLOAD) ===
 
+		// Helpers
 		$format2 = function ($v) {
 			return number_format((float)$v, 2, '.', '');
 		};
@@ -2335,26 +2336,66 @@ class NfseController extends Controller
 			return number_format((float)$v, 4, '.', '');
 		};
 
+		// ============================
 		// IBGE emitente
+		// ============================
 		$codigoMunicipioEmitente = null;
 		if (!empty($token->cidade_id)) {
 			$city = City::find($token->cidade_id);
 			$codigoMunicipioEmitente = $city ? (string)$city->codigo : null;
 		}
 
-		$optanteSimples = ((int)($empresa->regime ?? 1)) === 1;
-		$issRetido = ((int)($servico->iss_retido ?? 0)) === 1;
+		// Regime no BD: 'simples' ou 'normal'
+		$regime = strtolower(trim((string)($token->regime ?? 'simples')));
+		$optanteSimples = $regime === 'simples';
 
+		if ($regime === 'simples') {
+			$optanteSimples = true;
+		} else {
+			$optanteSimples = false;
+		}
+
+		$isMei = $regime === 'mei';
+
+		// issRetido = 2 - não
+		// issRetido = 1 - sim
+		$issRetido = ((int)($servico->iss_retido ?? 2)) === 1;
+
+		// ============================
+		// MUNICÍPIO DA PRESTAÇÃO (local onde fez o serviço)
+		// ============================
 		$codigoMunicipioPrestacao = null;
 		if (!empty($servico->cidade_local_prestacao_servico_id)) {
 			$city = City::find($servico->cidade_local_prestacao_servico_id);
 			$codigoMunicipioPrestacao = $city ? (string)$city->codigo : null;
 		}
 
-		$codigoMunicipioIncidencia = $codigoMunicipioEmitente;
+		// Se não tiver cidade de prestação definida, podemos usar a cidade do tomador
+		$codigoMunicipioTomador = null;
+		if (!empty($item->cidade_id) && $item->cidade) {
+			$codigoMunicipioTomador = (string)($item->cidade->codigo ?? '');
+		}
 
-		$issDevidoOutroMunicipio = $codigoMunicipioIncidencia !== $codigoMunicipioEmitente;
-		$deveInformarAliquotaISS = ($issDevidoOutroMunicipio || ($optanteSimples && $issRetido));
+		// ============================
+		// MUNICÍPIO DE INCIDÊNCIA (quem recolhe o ISS)
+		// ============================
+		$itemListaServico = (string)$servico->codigo_servico;
+		$codigoMunicipioIncidencia = $this->definirMunicipioIncidencia(
+			$itemListaServico,
+			$codigoMunicipioEmitente,
+			$codigoMunicipioPrestacao,
+			$codigoMunicipioTomador
+		);
+
+		// Por padrão, alíquota é obrigatória
+		$deveInformarAliquotaISS = true;
+
+		// Exceções onde pode ser 0%
+		if ($isMei) {
+			$deveInformarAliquotaISS = false;
+		} elseif ($codigoMunicipioIncidencia === $codigoMunicipioEmitente) {
+			$deveInformarAliquotaISS = false;
+		}
 
 		// Tomador docs
 		$doc = preg_replace('/[^0-9]/', '', (string)$item->documento);
@@ -2362,88 +2403,114 @@ class NfseController extends Controller
 		$ie = preg_replace('/[^0-9]/', '', (string)$item->ie);
 		$isCpfTomador = strlen($doc) === 11;
 
-		// Competência igual ao enviar()
+		// Competência YYYY-MM
 		$competencia = $servico->data_competencia
 			? \Carbon\Carbon::parse($servico->data_competencia)->format('Y-m-d\TH:i:sP')
 			: \Carbon\Carbon::now()->format('Y-m-d\TH:i:sP');
 
+		// Simples Nacional
 		$incentivoFiscal = false;
 		$outrasInfo = '';
 
-		// Cálculos
+		// ============================
+		// CÁLCULOS DE VALORES
+		// ============================
 		$valorServicos = (float)$servico->valor_servico;
 		$valorDeducoes = (float)($servico->valor_deducoes ?? 0);
-		$baseCalculo   = max($valorServicos - $valorDeducoes, 0);
+		$baseCalculo = max($valorServicos - $valorDeducoes, 0);
+
+		// aliquota_iss = percentual (ex: 3.44)
+		// aliquota_issqn = fração (ex: 0.0344)
 		$aliquotaIssPercent = (float)($servico->aliquota_iss ?? 0);
-		$aliquotaIssqnFrac  = (float)($servico->aliquota_issqn ?? 0);
-		$valorIss      = $baseCalculo * $aliquotaIssqnFrac;
-		$valorPis      = (float)($servico->valor_pis ?? 0);
-		$valorCofins   = (float)($servico->valor_cofins ?? 0);
-		$valorInss     = (float)($servico->valor_inss ?? 0);
-		$valorIr       = (float)($servico->valor_ir ?? 0);
-		$valorCsll     = (float)($servico->valor_csll ?? 0);
+		$aliquotaIssqnFrac = (float)($servico->aliquota_issqn ?? 0);
+
+		// Se não precisa informar alíquota ISS, zera a fração para não gerar valor_iss
+		if (!$deveInformarAliquotaISS) {
+			$aliquotaIssPercent = 0;
+			$aliquotaIssqnFrac = 0;
+		}
+
+		// ATENÇÃO: mesma fórmula do enviar()
+		$valorIss = $baseCalculo * ($aliquotaIssqnFrac / 100);
+
+		$valorPis = (float)($servico->valor_pis ?? 0);
+		$valorCofins = (float)($servico->valor_cofins ?? 0);
+		$valorInss = (float)($servico->valor_inss ?? 0);
+		$valorIr = (float)($servico->valor_ir ?? 0);
+		$valorCsll = (float)($servico->valor_csll ?? 0);
 		$outrasRetencoes = (float)($servico->outras_retencoes ?? 0);
-		$descontoIncond  = (float)($servico->desconto_incondicional ?? 0);
-		$descontoCond    = (float)($servico->desconto_condicional ?? 0);
-		$valorLiquidoNfse = $baseCalculo - $valorPis - $valorCofins - $valorInss - $valorIr
-			- $valorCsll - $outrasRetencoes - $descontoIncond - $descontoCond;
+		$descontoIncond = (float)($servico->desconto_incondicional ?? 0);
+		$descontoCond = (float)($servico->desconto_condicional ?? 0);
+
+		$valorLiquidoNfse = $baseCalculo
+			- $valorPis
+			- $valorCofins
+			- $valorInss
+			- $valorIr
+			- $valorCsll
+			- $outrasRetencoes
+			- $descontoIncond
+			- $descontoCond;
 
 		// Itens
-		$itemListaServico   = (string)$servico->codigo_servico;
-		$quantidadeItem     = 1;
-		$valorUnitarioItem  = $valorServicos;
+		$quantidadeItem = 1;
+		$valorUnitarioItem = $valorServicos;
 
 		// Numeração (igual enviar: próximo RPS)
-		$numero     = (int)($empresa->numero_rps ?? 0) + 1;
+		$numero = (int)($empresa->numero_rps ?? 0) + 1;
 		$numeroSerie = (int)($empresa->numero_serie_nfse ?? 1);
 
-		// Prestador
-		$cnpjPrest      = preg_replace('/[^0-9]/', '', (string)$empresa->cnpj);
-		$imPrest        = (string)($token->im ?? '');
-		$razaoPrest     = (string)($token->razao_social ?? $empresa->name ?? '');
-		$fantasiaPrest  = (string)($token->nome ?? $empresa->name ?? '');
-		$telefonePrest  = (string)($token->telefone ?? '');
-		$emailPrest     = (string)($token->email ?? '');
-		$cepPrest       = preg_replace('/[^0-9]/', '', (string)($token->cep ?? ''));
+		// Prestador (Business)
+		$cnpjPrest = preg_replace('/[^0-9]/', '', (string)$empresa->cnpj);
+		$imPrest = (string)($token->im ?? '');
+		$razaoPrest = (string)($token->razao_social ?? $empresa->name ?? '');
+		$fantasiaPrest = (string)($token->nome ?? $empresa->name ?? '');
+		$telefonePrest = (string)($token->telefone ?? '');
+		$emailPrest = (string)($token->email ?? '');
+		$cepPrest = preg_replace('/[^0-9]/', '', (string)($token->cep ?? ''));
 		$logradouroPrest = (string)($token->rua ?? '');
-		$numeroPrest    = (string)($token->numero ?? '');
-		$complPrest     = (string)($token->complemento ?? '');
-		$bairroPrest    = (string)($token->bairro ?? '');
+		$numeroPrest = (string)($token->numero ?? '');
+		$complPrest = (string)($token->complemento ?? '');
+		$bairroPrest = (string)($token->bairro ?? '');
 		$codigoCnaePrest = (string)($empresa->cnae ?? ($servico->codigo_cnae ?? ''));
 		$tokenPrestador = trim((string)$token->token);
 		$codigoAleatorio = str_pad((string)random_int(0, 99999999), 8, '0', STR_PAD_LEFT);
 
+		// ============================
+		// BLOCO VALORES SERVIÇO
+		// ============================
 		$valoresServico = [
-			'valor_deducoes'          => $format2($valorDeducoes),
-			'valor_pis'               => $format2($valorPis),
-			'valor_cofins'            => $format2($valorCofins),
-			'valor_inss'              => $format2($valorInss),
-			'valor_ir'                => $format2($valorIr),
-			'valor_csll'              => $format2($valorCsll),
-			'outras_retencoes'        => $format2($outrasRetencoes),
-			'valor_iss'               => $format2($valorIss),
-			'desconto_incondicionado' => $format2($descontoIncond),
-			'desconto_condicionado'   => $format2($descontoCond),
+			'valor_deducoes'           => $format2($valorDeducoes),
+			'valor_pis'                => $format2($valorPis),
+			'valor_cofins'             => $format2($valorCofins),
+			'valor_inss'               => $format2($valorInss),
+			'valor_ir'                 => $format2($valorIr),
+			'valor_csll'               => $format2($valorCsll),
+			'outras_retencoes'         => $format2($outrasRetencoes),
+			'valor_iss'                => $format2($valorIss),
+			'desconto_incondicionado'  => $format2($descontoIncond),
+			'desconto_condicionado'    => $format2($descontoCond),
 		];
 
+		// Só informa valor_aliquota se a prefeitura exige
 		if ($deveInformarAliquotaISS) {
 			$valoresServico['valor_aliquota'] = $format2($aliquotaIssPercent);
 		}
 
+		// Item (estrutura da API)
 		$itemServico = [
-			'codigo'                     => $itemListaServico,
-			'codigo_cnae'                => (string)($servico->codigo_cnae ?? ''),
+			'codigo'                      => $itemListaServico,
+			'codigo_cnae'                 => (string)($servico->codigo_cnae ?? ''),
 			'codigo_tributacao_municipio' => (string)($servico->codigo_tributacao_municipio ?? ''),
-			'discriminacao'              => $this->retiraAcentos((string)$servico->discriminacao),
-			'quantidade'                 => (string)$quantidadeItem,
-			'valor_unitario'             => $format2($valorUnitarioItem),
-			'valor_servicos'             => (float)$valorServicos,
+			'discriminacao'               => $this->retiraAcentos((string)$servico->discriminacao),
+			'quantidade'                  => (string)$quantidadeItem,
+			'valor_unitario'              => $format2($valorUnitarioItem),
+			'valor_servicos'              => (float)$valorServicos,
 		];
 
-		if ($deveInformarAliquotaISS) {
-			$itemServico['valor_aliquota'] = $format2($aliquotaIssPercent);
-		}
-
+		// ============================
+		// MONTAGEM DO PAYLOAD (IGUAL ENVIAR)
+		// ============================
 		$payload = [
 			'numero' => (string)$numero,
 			'serie'  => (string)$numeroSerie,
@@ -2465,15 +2532,13 @@ class NfseController extends Controller
 					'valor_servicos' => $format2($valorServicos),
 					'valores'        => $valoresServico,
 				],
-				'iss_retido' => $issRetido,
+				'iss_retido' => ((int)($servico->iss_retido ?? 0)) === 1,
 				'item_lista_servico' => $itemListaServico,
-				'codigo_municipio'    => (string)($codigoMunicipioPrestacao ?: $codigoMunicipioEmitente),
+				'codigo_municipio'    => (string)$codigoMunicipioPrestacao,
 				'municipio_incidencia' => (string)$codigoMunicipioIncidencia,
 				'exigibilidade_iss' => (string)($servico->exigibilidade_iss),
 				'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
-				'aliquota_issqn' => $deveInformarAliquotaISS
-					? $format4($servico->aliquota_issqn)
-					: $format4(0),
+				'aliquota_issqn' => $format4($aliquotaIssqnFrac),
 				'itens' => [
 					$itemServico,
 				],
@@ -2524,7 +2589,7 @@ class NfseController extends Controller
 			'token_prestador' => $tokenPrestador,
 		];
 
-		// === Fim da cópia do enviar() ===
+		// === FIM DA CÓPIA DO ENVIAR() ===
 
 		return response()->json([
 			'nfse_id' => $item->id,
@@ -2534,27 +2599,5 @@ class NfseController extends Controller
 		], 200, [], JSON_PRETTY_PRINT);
 	}
 
-	/**
-	 * Helper opcional para gerar XML de leitura (não é o XML oficial da Integra Notas).
-	 */
-	private function arrayToXml(string $root, array $data): string
-	{
-		$xml = new \SimpleXMLElement("<{$root}/>");
 
-		$add = function ($value, \SimpleXMLElement $node) use (&$add) {
-			foreach ($value as $key => $val) {
-				$key = is_numeric($key) ? 'item' : $key;
-				if (is_array($val)) {
-					$child = $node->addChild($key);
-					$add($val, $child);
-				} else {
-					$node->addChild($key, htmlspecialchars((string)$val));
-				}
-			}
-		};
-
-		$add($data, $xml);
-
-		return $xml->asXML();
-	}
 }
