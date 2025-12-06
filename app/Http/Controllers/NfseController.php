@@ -703,6 +703,7 @@ class NfseController extends Controller
 	}
 
 
+	// metodo enviar com valor aliquota iss em servico e itens
 	public function enviar(Request $request)
 	{
 		$business_id = request()->session()->get('user.business_id');
@@ -710,32 +711,37 @@ class NfseController extends Controller
 		$token = NfseConfig::where('empresa_id', $business_id)->first();
 
 		$item = Nfse::findOrFail($request->id);
-		if ($item->estado === 'aprovado') return response()->json('Este documento esta aprovado', 401);
-		if ($item->estado === 'cancelado') return response()->json('Este documento esta cancelado', 401);
+		if ($item->estado === 'aprovado') {
+			return response()->json('Este documento esta aprovado', 401);
+		}
+		if ($item->estado === 'cancelado') {
+			return response()->json('Este documento esta cancelado', 401);
+		}
 
 		if (!is_dir(public_path('nfse_doc'))) @mkdir(public_path('nfse_doc'), 0777, true);
 		if (!is_dir(public_path('nfse_pdf'))) @mkdir(public_path('nfse_pdf'), 0777, true);
 
-		$ambiente = ((int)($empresa->ambiente));
+		$ambiente = (int) $empresa->ambiente;
 		$nfse = new NfseSdk([
 			'token' => trim((string) $token->token),
 			'ambiente' => $ambiente,
-			'options' => ['debug' => false, 'timeout' => 60, 'port' => 443, 'http_version' => CURL_HTTP_VERSION_NONE],
+			'options' => [
+				'debug'        => false,
+				'timeout'      => 60,
+				'port'         => 443,
+				'http_version' => CURL_HTTP_VERSION_NONE
+			],
 		]);
 
 		$servico = $item->servico;
 
 		try {
 			// Helpers
-			$format2 = function ($v) {
-				return number_format((float)$v, 2, '.', '');
-			};
-			$format4 = function ($v) {
-				return number_format((float)$v, 4, '.', '');
-			};
+			$format2 = fn($v) => number_format((float)$v, 2, '.', '');
+			$format4 = fn($v) => number_format((float)$v, 4, '.', '');
 
 			// ============================
-			// IBGE emitente
+			// MUNICÍPIOS (emitente / prestação / tomador / incidência)
 			// ============================
 			$codigoMunicipioEmitente = null;
 			if (!empty($token->cidade_id)) {
@@ -743,115 +749,76 @@ class NfseController extends Controller
 				$codigoMunicipioEmitente = $city ? (string)$city->codigo : null;
 			}
 
-			// Regime no BD: 'simples' ou 'normal'
-			$regime = strtolower(trim((string)($token->regime ?? 'simples')));
-			$optanteSimples = $regime === 'simples';
-
-			if ($regime === 'simples') {
-				$optanteSimples = true;
-			} else {
-				$optanteSimples = false;
-			}
-
-			$isMei = $regime === 'mei';
-
-			// issRetido = 2 - não
-			// issRetido = 1 - sim
-			$issRetido = ((int)($servico->iss_retido ?? 2)) === 1;
-			// ============================
-			// MUNICÍPIO DA PRESTAÇÃO (local onde fez o serviço)
-			// ============================
-			$codigoMunicipioPrestacao = null; // <<< NOVO (nome mais claro)
+			// Local da prestação (se não tiver, cai no emitente)
+			$codigoMunicipioPrestacao = null;
 			if (!empty($servico->cidade_local_prestacao_servico_id)) {
 				$city = City::find($servico->cidade_local_prestacao_servico_id);
 				$codigoMunicipioPrestacao = $city ? (string)$city->codigo : null;
 			}
+			if (empty($codigoMunicipioPrestacao)) {
+				$codigoMunicipioPrestacao = $codigoMunicipioEmitente;
+			}
 
-			// Se não tiver cidade de prestação definida, podemos usar a cidade do tomador
-			$codigoMunicipioTomador = null; // <<< NOVO
+			// Cidade do tomador (se tiver)
+			$codigoMunicipioTomador = null;
 			if (!empty($item->cidade_id) && $item->cidade) {
 				$codigoMunicipioTomador = (string)($item->cidade->codigo ?? '');
 			}
 
-			// ============================
-			// MUNICÍPIO DE INCIDÊNCIA (quem recolhe o ISS)
-			// ============================
+			// Município de incidência (usa o helper que você já tem)
 			$itemListaServico = (string)$servico->codigo_servico;
-			$codigoMunicipioIncidencia = $this->definirMunicipioIncidencia( // <<< NOVO
+			$codigoMunicipioIncidencia = $this->definirMunicipioIncidencia(
 				$itemListaServico,
 				$codigoMunicipioEmitente,
 				$codigoMunicipioPrestacao,
 				$codigoMunicipioTomador
 			);
 
-			// ISS devido a outro município: compara INCIDÊNCIA x LOCAL DA PRESTAÇÃO
-			// $issDevidoOutroMunicipio =
-			// 	$codigoMunicipioIncidencia
-			// 	&& $codigoMunicipioPrestacao
-			// 	&& $codigoMunicipioIncidencia !== $codigoMunicipioPrestacao; // <<< AJUSTE
+			// ============================
+			// REGIME / SIMPLES
+			// ============================
+			// No teu sistema só usa 'simples' e 'normal'
+			$regime = strtolower(trim((string)($token->regime ?? 'simples')));
+			$optanteSimples = ($regime === 'simples');
 
-			// Quando ISS é devido a outro município, ou Simples + ISS retido,
-			// a prefeitura exige que a alíquota seja informada.
-			// $deveInformarAliquotaISS = ($issDevidoOutroMunicipio || ($optanteSimples && $issRetido)); // <<< AJUSTE
-
-			// $isRegimeFixo = in_array($regime, ['fixo', 'fixo_mensal', 'fixo_iss'], true);
-
-			// Por padrão, alíquota é obrigatória
-			// $deveInformarAliquotaISS = true;
-
-			// Exceções onde pode ser 0%
-			// if ($isMei) {
-			// 	$deveInformarAliquotaISS = false;
-			// } elseif ($codigoMunicipioIncidencia === $codigoMunicipioEmitente) {
-			// 	$deveInformarAliquotaISS = false;
-			// }
-
-			// Tomador docs
+			// ============================
+			// DOCUMENTOS DO TOMADOR
+			// ============================
 			$doc = preg_replace('/[^0-9]/', '', (string)$item->documento);
-			$im = preg_replace('/[^0-9]/', '', (string)$item->im);
-			$ie = preg_replace('/[^0-9]/', '', (string)$item->ie);
 			$isCpfTomador = strlen($doc) === 11;
 
-			// Competência YYYY-MM
+			// Competência
 			$competencia = $servico->data_competencia
 				? \Carbon\Carbon::parse($servico->data_competencia)->format('Y-m-d\TH:i:sP')
 				: \Carbon\Carbon::now()->format('Y-m-d\TH:i:sP');
 
-			// Simples Nacional
 			$incentivoFiscal = false;
 			$outrasInfo = '';
 
+
+
 			// ============================
-			// CÁLCULOS DE VALORES
+			// CÁLCULOS
 			// ============================
 			$valorServicos = (float)$servico->valor_servico;
 			$valorDeducoes = (float)($servico->valor_deducoes ?? 0);
-			$baseCalculo = max($valorServicos - $valorDeducoes, 0);
-
-			// aliquota_iss = percentual (ex: 3.44)
-			// aliquota_issqn = fração (ex: 0.0344)
-			$aliquotaIssPercent = (float)($servico->aliquota_iss ?? 0);
-
-			$aliquotaIssqnFrac = $aliquotaIssPercent > 0 ? $aliquotaIssPercent / 100.0 : 0.0;
-
-			// $aliquotaIssqnFrac = (float)($servico->aliquota_issqn ?? 0);
-
-			// Se não precisa informar alíquota ISS, zera a fração para não gerar valor_iss
-			// if (!$deveInformarAliquotaISS) { // <<< NOVO
-			// 	$aliquotaIssPercent = 0;
-			// 	$aliquotaIssqnFrac = 0;
-			// }
-
-			$valorIss = $baseCalculo * $aliquotaIssqnFrac;
-
-			$valorPis = (float)($servico->valor_pis ?? 0);
-			$valorCofins = (float)($servico->valor_cofins ?? 0);
-			$valorInss = (float)($servico->valor_inss ?? 0);
-			$valorIr = (float)($servico->valor_ir ?? 0);
-			$valorCsll = (float)($servico->valor_csll ?? 0);
+			$valorPis      = (float)($servico->valor_pis ?? 0);
+			$valorCofins   = (float)($servico->valor_cofins ?? 0);
+			$valorInss     = (float)($servico->valor_inss ?? 0);
+			$valorIr       = (float)($servico->valor_ir ?? 0);
+			$valorCsll     = (float)($servico->valor_csll ?? 0);
 			$outrasRetencoes = (float)($servico->outras_retencoes ?? 0);
 			$descontoIncond = (float)($servico->desconto_incondicional ?? 0);
-			$descontoCond = (float)($servico->desconto_condicional ?? 0);
+			$descontoCond   = (float)($servico->desconto_condicional ?? 0);
+
+			$baseCalculo = max($valorServicos - $valorDeducoes, 0);
+
+			// No BD você salva 2, 3, 4, 5 (percentual)
+			$aliquotaIssPercent = (float)($servico->aliquota_iss ?? $servico->aliquota_issqn ?? 0);
+			// Fração para cálculo do ISS (0.02, 0.03, etc.)
+			$aliquotaIssqnFrac  = $aliquotaIssPercent > 0 ? $aliquotaIssPercent / 100.0 : 0.0;
+
+			$valorIss = $baseCalculo * $aliquotaIssqnFrac;
 
 			$valorLiquidoNfse = $baseCalculo
 				- $valorPis
@@ -863,149 +830,146 @@ class NfseController extends Controller
 				- $descontoIncond
 				- $descontoCond;
 
-			// Itens
-			$quantidadeItem = 1;
-			$valorUnitarioItem = $valorServicos;
-
-			// Numeração
-			$numero = (int)($empresa->numero_rps ?? 0) + 1;
-			$numeroSerie = (int)($empresa->numero_serie_nfse ?? 1);
-
-			// Prestador (Business)
+			// ============================
+			// PRESTADOR
+			// ============================
 			$cnpjPrest = preg_replace('/[^0-9]/', '', (string)$empresa->cnpj);
-			$imPrest = (string)($token->im ?? '');
+			$imPrest   = (string)($token->im ?? '');
 			$razaoPrest = (string)($token->razao_social ?? $empresa->name ?? '');
 			$fantasiaPrest = (string)($token->nome ?? $empresa->name ?? '');
 			$telefonePrest = (string)($token->telefone ?? '');
-			$emailPrest = (string)($token->email ?? '');
-			$cepPrest = preg_replace('/[^0-9]/', '', (string)($token->cep ?? ''));
+			$emailPrest    = (string)($token->email ?? '');
+			$cepPrest      = preg_replace('/[^0-9]/', '', (string)($token->cep ?? ''));
 			$logradouroPrest = (string)($token->rua ?? '');
-			$numeroPrest = (string)($token->numero ?? '');
-			$complPrest = (string)($token->complemento ?? '');
-			$bairroPrest = (string)($token->bairro ?? '');
+			$numeroPrest   = (string)($token->numero ?? '');
+			$complPrest    = (string)($token->complemento ?? '');
+			$bairroPrest   = (string)($token->bairro ?? '');
 			$codigoCnaePrest = (string)($empresa->cnae ?? ($servico->codigo_cnae ?? ''));
 			$tokenPrestador = trim((string)$token->token);
 			$codigoAleatorio = str_pad((string)random_int(0, 99999999), 8, '0', STR_PAD_LEFT);
 
 			// ============================
-			// BLOC VALORES SERVIÇO
+			// BLOC VALORES SERVIÇO (NO PADRÃO QUE JÁ FUNCIONOU)
 			// ============================
 			$valoresServico = [
-				'valor_deducoes'           => $format2($valorDeducoes),
-				'valor_pis'                => $format2($valorPis),
-				'valor_cofins'             => $format2($valorCofins),
-				'valor_inss'               => $format2($valorInss),
-				'valor_ir'                 => $format2($valorIr),
-				'valor_csll'               => $format2($valorCsll),
-				'outras_retencoes'         => $format2($outrasRetencoes),
-				'valor_iss'                => $format2($valorIss),
-				'desconto_incondicionado'  => $format2($descontoIncond),
-				'desconto_condicionado'    => $format2($descontoCond),
+				'valor_deducoes'          => $format2($valorDeducoes),
+				'valor_pis'               => $format2($valorPis),
+				'valor_cofins'            => $format2($valorCofins),
+				'valor_inss'              => $format2($valorInss),
+				'valor_ir'                => $format2($valorIr),
+				'valor_csll'              => $format2($valorCsll),
+				'outras_retencoes'        => $format2($outrasRetencoes),
+				'valor_iss'               => $format2($valorIss),
+				'valor_aliquota'          => $format2($aliquotaIssPercent), // 2.00, 3.00, etc
+				'desconto_incondicionado' => $format2($descontoIncond),
+				'desconto_condicionado'   => $format2($descontoCond),
 			];
 
-			// Só informa valor_aliquota (Aliquota no XML) se a prefeitura exige
-			$valoresServico['valor_aliquota'] = $format2($aliquotaIssPercent);
-
-			// Item (estrutura da API)
+			// Item
 			$itemServico = [
 				'codigo'                      => $itemListaServico,
 				'codigo_cnae'                 => (string)($servico->codigo_cnae ?? ''),
 				'codigo_tributacao_municipio' => (string)($servico->codigo_tributacao_municipio ?? ''),
 				'discriminacao'               => $this->retiraAcentos((string)$servico->discriminacao),
-				'quantidade'                  => (string)$quantidadeItem,
-				'valor_unitario'              => $format2($valorUnitarioItem),
+				'quantidade'                  => '1',
+				'valor_unitario'              => $format2($valorServicos),
 				'valor_servicos'              => (float)$valorServicos,
+				'valor_aliquota'              => $format2($aliquotaIssPercent),
 			];
+
+			// ============================
+			// NUMERAÇÃO
+			// ============================
+			$numero = (int)($empresa->numero_rps ?? 0) + 1;
+			$numeroSerie = (int)($empresa->numero_serie_nfse ?? 1);
 
 			// ============================
 			// MONTAGEM DO PAYLOAD
 			// ============================
 			$payload = [
-				'numero' => (string)$numero,
-				'serie' => (string)$numeroSerie,
-				'tipo' => '1',
-				'data_emissao' => date('Y-m-d\TH:i:sP'),
-				'competencia' => $competencia,
-				'natureza_operacao' => (string)($item->natureza_operacao ?? '1'),
-				'optante_simples_nacional' => $optanteSimples,
-				'incentivo_fiscal' => $incentivoFiscal,
-				'status' => '1',
-				'outras_informacoes' => $outrasInfo,
-				'valores_nfse' => [
-					'base_calculo' => $format2($baseCalculo),
+				'numero'                 => (string)$numero,
+				'serie'                  => (string)$numeroSerie,
+				'tipo'                   => '1',
+				'data_emissao'           => date('Y-m-d\TH:i:sP'),
+				'competencia'            => $competencia,
+				'natureza_operacao'      => (string)($item->natureza_operacao ?? '1'),
+				'optante_simples_nacional' => $optanteSimples ? '1' : '0',
+				'incentivo_fiscal'       => $incentivoFiscal,
+				'status'                 => '1',
+				'outras_informacoes'     => $outrasInfo,
+				'valores_nfse'           => [
+					'base_calculo'      => $format2($baseCalculo),
 					'valor_liquido_nfse' => $format2($valorLiquidoNfse),
 				],
+				// === SERVIÇO NO FORMATO QUE A PREFEITURA ACEITOU ===
 				'servico' => [
 					'valor_servicos' => $format2($valorServicos),
-					'valores' => [
-						'valor_servicos' => $format2($valorServicos),
-						'valores'        => $valoresServico,
-					],
-					'iss_retido' => ((int)($servico->iss_retido ?? 0)) === 1,
+					'valores' => $valoresServico,
+					'iss_retido'         => ((int)($servico->iss_retido ?? 0)) === 1,
 					'item_lista_servico' => $itemListaServico,
-
-					// Local da prestação (EX: 5201405 - Aparecida) <<< AJUSTE
-					'codigo_municipio'    => (string)$codigoMunicipioPrestacao,
-
-					// Município de incidência (quem recolhe ISS – ex: 5208707 - Goiânia) <<< AJUSTE
-					'municipio_incidencia' => (string)$codigoMunicipioIncidencia,
-
-					'exigibilidade_iss' => (string)($servico->exigibilidade_iss),
-					'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
-
-					// Fração da alíquota (0.0200, 0.0344, etc.)
-					'aliquota_issqn' => $format4($aliquotaIssqnFrac), // <<< AJUSTE (já zero quando não precisa)
-
+					'codigo_municipio'      => (string)$codigoMunicipioPrestacao,
+					'municipio_incidencia'  => (string)$codigoMunicipioIncidencia,
+					// se quiser aproximar do médico, poderia mandar:
+					// 'codigo_municipio_prestacao' => (string)$codigoMunicipioPrestacao,
+					'exigibilidade_iss'  => (string)$servico->exigibilidade_iss,
+					'discriminacao'      => $this->retiraAcentos((string)$servico->discriminacao),
+					// Fração da alíquota (0.0200 = 2%)
+					'aliquota_issqn'     => $format4($aliquotaIssqnFrac),
 					'itens' => [
 						$itemServico
 					],
 				],
+
 				'prestador' => [
-					'cnpj' => $cnpjPrest,
+					'cnpj'                => $cnpjPrest,
 					'inscricao_municipal' => $imPrest,
-					'razao_social' => $this->retiraAcentos($razaoPrest),
-					'nome_fantasia' => $this->retiraAcentos($fantasiaPrest),
-					'codigo_cnae' => $codigoCnaePrest,
+					'razao_social'        => $this->retiraAcentos($razaoPrest),
+					'nome_fantasia'       => $this->retiraAcentos($fantasiaPrest),
+					'codigo_cnae'         => $codigoCnaePrest,
 					'endereco' => [
-						'logradouro' => $this->retiraAcentos($logradouroPrest),
-						'numero' => $this->retiraAcentos($numeroPrest),
-						'complemento' => $this->retiraAcentos($complPrest),
-						'bairro' => $this->retiraAcentos($bairroPrest),
+						'logradouro'      => $this->retiraAcentos($logradouroPrest),
+						'numero'          => $this->retiraAcentos($numeroPrest),
+						'complemento'     => $this->retiraAcentos($complPrest),
+						'bairro'          => $this->retiraAcentos($bairroPrest),
 						'codigo_municipio' => (string)$codigoMunicipioEmitente,
-						'cep' => $cepPrest,
+						'cep'             => $cepPrest,
 					],
 					'contato' => [
-						'telefone' => $telefonePrest,
-						'email' => $emailPrest,
+						'telefone'        => $telefonePrest,
+						'email'           => $emailPrest,
 					],
 					'token' => $tokenPrestador,
 				],
+
 				'tomador' => [
 					'identificacao_tomador' => $isCpfTomador ? ['cpf' => $doc] : ['cnpj' => $doc],
 					($isCpfTomador ? 'cpf' : 'cnpj') => $doc,
 					'razao_social' => $this->retiraAcentos((string)$item->razao_social),
 					'endereco' => [
-						'logradouro' => $this->retiraAcentos((string)$item->rua),
-						'numero' => $this->retiraAcentos((string)$item->numero),
-						'complemento' => $this->retiraAcentos((string)($item->complemento ?? '')),
-						'bairro' => $this->retiraAcentos((string)$item->bairro),
+						'logradouro'       => $this->retiraAcentos((string)$item->rua),
+						'numero'           => $this->retiraAcentos((string)$item->numero),
+						'complemento'      => $this->retiraAcentos((string)($item->complemento ?? '')),
+						'bairro'           => $this->retiraAcentos((string)$item->bairro),
 						'codigo_municipio' => (string)($item->cidade->codigo ?? ''),
-						'uf' => (string)($item->cidade->uf ?? ''),
-						'cep' => preg_replace('/[^0-9]/', '', (string)$item->cep ?? ''),
+						'uf'               => (string)($item->cidade->uf ?? ''),
+						'cep'              => preg_replace('/[^0-9]/', '', (string)$item->cep ?? ''),
 					],
 					'contato' => [
 						'telefone' => (string)($item->telefone ?? ''),
-						'email' => (string)($item->email ?? ''),
+						'email'    => (string)($item->email ?? ''),
 					],
 				],
+
 				'orgao_gerador' => [
 					'codigo_municipio' => (string)$codigoMunicipioEmitente,
 				],
-				'nacional' => true,
+
+				'nacional'       => true,
 				'codigo_aleatorio' => $codigoAleatorio,
-				'token_prestador' => $tokenPrestador,
+				'token_prestador'  => $tokenPrestador,
 			];
 
+			// Se quiser conferir antes:
 			// dd($payload);
 
 			$resp = $nfse->cria($payload);
@@ -1016,32 +980,34 @@ class NfseController extends Controller
 					$item->save();
 				}
 
-				sleep(10); // muitos provedores processam em background
-
+				sleep(10);
 				$consulta = $nfse->consulta(['chave' => $resp->chave]);
 
 				if (($consulta->codigo ?? null) != 5023) {
 					if (!empty($consulta->sucesso)) {
-						$item->estado = 'aprovado';
-						$item->url_pdf_nfse = $consulta->link_pdf ?? '';
-						$item->numero_nfse = $consulta->numero ?? 0;
-						$item->serie = $consulta->serie ?? '';
+						$item->estado             = 'aprovado';
+						$item->url_pdf_nfse       = $consulta->link_pdf ?? '';
+						$item->numero_nfse        = $consulta->numero ?? 0;
+						$item->serie              = $consulta->serie ?? '';
 						$item->codigo_verificacao = $consulta->codigo_verificacao ?? '';
 						$item->save();
 
 						if (isset($empresa->ultimo_numero_nfse) && !empty($consulta->numero)) {
 							$empresa->ultimo_numero_nfse = (int)$consulta->numero;
-							$empresa->numero_rps = (int)$consulta->rps_numero;
+							$empresa->numero_rps         = (int)$consulta->rps_numero;
 							$empresa->save();
 						}
+
 						if (!empty($consulta->xml)) {
 							$xml = base64_decode($consulta->xml);
 							@file_put_contents(public_path('nfse_doc/') . $resp->chave . '.xml', $xml);
 						}
+
 						if (!empty($consulta->pdf)) {
 							$pdf = base64_decode($consulta->pdf);
 							@file_put_contents(public_path('nfse_pdf/') . $resp->chave . '.pdf', $pdf);
 						}
+
 						return response()->json($consulta, 200);
 					}
 
@@ -1059,10 +1025,13 @@ class NfseController extends Controller
 			$item->save();
 			return response()->json($resp, 422);
 		} catch (\Throwable $e) {
-			return response()->json(['sucesso' => false, 'mensagem' => $e->getMessage(), 'linha' => $e->getLine()], 500);
+			return response()->json([
+				'sucesso'  => false,
+				'mensagem' => $e->getMessage(),
+				'linha'    => $e->getLine()
+			], 500);
 		}
 	}
-
 
 
 	private function definirMunicipioIncidencia(
@@ -1361,6 +1330,7 @@ class NfseController extends Controller
 
 			// Consulta pela CHAVE da NFSe (já cancelada por substituição)
 			$resp  = $sdk->consulta(['chave' => $nota->chave]);
+
 			$dados = $resp->nfse ?? $resp;
 
 			Log::info('NFSE CANCELAMENTO - Consulta para sincronizar cancelamento', [
@@ -1394,7 +1364,6 @@ class NfseController extends Controller
 			if (!empty($xmlBase64)) {
 				$xmlPathRel = 'nfse_cancelada_xml/' . $chaveLimpa . '.xml';
 				@file_put_contents(public_path($xmlPathRel), base64_decode($xmlBase64));
-				$nota->cancelamento_xml_path = $xmlPathRel;
 			}
 
 			// Salvar PDF de cancelamento:
@@ -1402,15 +1371,10 @@ class NfseController extends Controller
 			if (!empty($pdfBase64)) {
 				$pdfPathRel = 'nfse_cancelada_doc/' . $chaveLimpa . '.pdf';
 				@file_put_contents(public_path($pdfPathRel), base64_decode($pdfBase64));
-				$nota->cancelamento_pdf_path = $pdfPathRel;
 			}
 			// 2) se só vier "link_pdf" (URL), você pode manter o link na NFSe
 			//    e opcionalmente baixar o PDF dessa URL no futuro, se precisar.
-			if (!empty($linkPdf) && empty($nota->cancelamento_pdf_path)) {
-				// aqui apenas guardamos o link para referência (se tiver campo pra isso)
-				// se não tiver coluna específica, pode ignorar ou usar um campo de log
-				// ex: $nota->cancelamento_mensagem = 'link_pdf: '.$linkPdf;
-			}
+			
 
 			// Campos básicos de controle (opcional)
 			$nota->cancelamento_codigo      = $resp->codigo   ?? $nota->cancelamento_codigo;
@@ -1422,16 +1386,9 @@ class NfseController extends Controller
 			// Log bruto da resposta para debug
 			$logPathRel = 'nfse_cancelada_log/' . $chaveLimpa . '.json';
 			@file_put_contents(public_path($logPathRel), json_encode($resp));
-			$nota->cancelamento_log_path = $logPathRel;
 
 			$nota->save();
 
-			Log::info('NFSE CANCELAMENTO - Arquivos de cancelamento sincronizados via consulta', [
-				'nfse_id'   => $nota->id,
-				'pdf_path'  => $nota->cancelamento_pdf_path ?? null,
-				'xml_path'  => $nota->cancelamento_xml_path ?? null,
-				'link_pdf'  => $linkPdf ?? null,
-			]);
 		} catch (\Throwable $e) {
 			Log::error('NFSE CANCELAMENTO - Erro ao consultar/sincronizar cancelamento', [
 				'nfse_id'  => $nota->id ?? null,
@@ -1857,52 +1814,137 @@ class NfseController extends Controller
 		}
 
 
+
+		$regime = strtolower(trim((string)($token->regime ?? 'simples')));
+		$optanteSimples = $regime === 'simples';
+
+		// issRetido = 2 - não / 1 - sim
+		$issRetido = ((int)($servico->iss_retido ?? 2)) === 1;
+
+		// ============================
+		// MUNICÍPIO DA PRESTAÇÃO
+		// ============================
+		$codigoMunicipioPrestacao = null;
+		if (!empty($servico->cidade_local_prestacao_servico_id)) {
+			$city = City::find($servico->cidade_local_prestacao_servico_id);
+			$codigoMunicipioPrestacao = $city ? (string)$city->codigo : null;
+		}
+
+		// Tomador (cidade)
+		$codigoMunicipioTomador = null;
+		if (!empty($nfse->cidade_id) && $nfse->cidade) {
+			$codigoMunicipioTomador = (string)($nfse->cidade->codigo ?? '');
+		}
+
+		// ============================
+		// MUNICÍPIO DE INCIDÊNCIA
+		// ============================
+		$itemListaServico = (string)$servico->codigo_servico;
+		$codigoMunicipioIncidencia = $this->definirMunicipioIncidencia(
+			$itemListaServico,
+			$codigoMunicipioEmitente,
+			$codigoMunicipioPrestacao,
+			$codigoMunicipioTomador
+		);
+
+		// Por padrão, alíquota é obrigatória
+		$deveInformarAliquotaISS = true;
+
+
+
 		// Tomador docs
 		$doc = preg_replace('/[^0-9]/', '', (string)$nfse->documento);
 		$isCpfTomador = strlen($doc) === 11;
 
-		// Competência YYYY-MM
-		$competencia = date('Y-m');
+		$competencia = $servico->data_competencia
+			? \Carbon\Carbon::parse($servico->data_competencia)->format('Y-m-d\TH:i:sP')
+			: \Carbon\Carbon::now()->format('Y-m-d\TH:i:sP');
 
-		// Simples Nacional
-		$optanteSimples = ((int)($empresa->regime ?? 1)) === 1;
 		$incentivoFiscal = false;
+		$outrasInfo      = '';
 
-		// Cálculos
+
+
+
+
 		$valorServicos = (float)$servico->valor_servico;
 		$valorDeducoes = (float)($servico->valor_deducoes ?? 0);
-		$baseCalculo = max($valorServicos - $valorDeducoes, 0);
-		$aliquotaIssPercent = (float)($servico->aliquota_iss ?? 0);
-		$aliquotaIssqnFrac = (float)($servico->aliquota_issqn ?? 0);
-		$valorIss = $baseCalculo * $aliquotaIssqnFrac;
-		$valorPis = (float)($servico->valor_pis ?? 0);
-		$valorCofins = (float)($servico->valor_cofins ?? 0);
-		$valorInss = (float)($servico->valor_inss ?? 0);
-		$valorIr = (float)($servico->valor_ir ?? 0);
-		$valorCsll = (float)($servico->valor_csll ?? 0);
+		$valorPis      = (float)($servico->valor_pis ?? 0);
+		$valorCofins   = (float)($servico->valor_cofins ?? 0);
+		$valorInss     = (float)($servico->valor_inss ?? 0);
+		$valorIr       = (float)($servico->valor_ir ?? 0);
+		$valorCsll     = (float)($servico->valor_csll ?? 0);
 		$outrasRetencoes = (float)($servico->outras_retencoes ?? 0);
 		$descontoIncond = (float)($servico->desconto_incondicional ?? 0);
-		$descontoCond = (float)($servico->desconto_condicional ?? 0);
-		$valorLiquidoNfse = $baseCalculo - $valorPis - $valorCofins - $valorInss - $valorIr - $valorCsll - $outrasRetencoes - $descontoIncond - $descontoCond;
+		$descontoCond   = (float)($servico->desconto_condicional ?? 0);
 
-		// Itens
-		$itemListaServico = (string)$servico->codigo_servico;
+		$baseCalculo = max($valorServicos - $valorDeducoes, 0);
 
-		// Prestador
+		// No BD você salva 2, 3, 4, 5 (percentual)
+		$aliquotaIssPercent = (float)($servico->aliquota_iss ?? $servico->aliquota_issqn ?? 0);
+		// Fração para cálculo do ISS (0.02, 0.03, etc.)
+		$aliquotaIssqnFrac  = $aliquotaIssPercent > 0 ? $aliquotaIssPercent / 100.0 : 0.0;
+
+		$valorIss = $baseCalculo * $aliquotaIssqnFrac;
+
+		$valorLiquidoNfse = $baseCalculo
+			- $valorPis
+			- $valorCofins
+			- $valorInss
+			- $valorIr
+			- $valorCsll
+			- $outrasRetencoes
+			- $descontoIncond
+			- $descontoCond;
+
+		// ============================
+		// PRESTADOR
+		// ============================
 		$cnpjPrest = preg_replace('/[^0-9]/', '', (string)$empresa->cnpj);
-		$imPrest = (string)($token->im ?? '');
+		$imPrest   = (string)($token->im ?? '');
 		$razaoPrest = (string)($token->razao_social ?? $empresa->name ?? '');
 		$fantasiaPrest = (string)($token->nome ?? $empresa->name ?? '');
 		$telefonePrest = (string)($token->telefone ?? '');
-		$emailPrest = (string)($token->email ?? '');
-		$cepPrest = preg_replace('/[^0-9]/', '', (string)($token->cep ?? ''));
+		$emailPrest    = (string)($token->email ?? '');
+		$cepPrest      = preg_replace('/[^0-9]/', '', (string)($token->cep ?? ''));
 		$logradouroPrest = (string)($token->rua ?? '');
-		$numeroPrest = (string)($token->numero ?? '');
-		$complPrest = (string)($token->complemento ?? '');
-		$bairroPrest = (string)($token->bairro ?? '');
+		$numeroPrest   = (string)($token->numero ?? '');
+		$complPrest    = (string)($token->complemento ?? '');
+		$bairroPrest   = (string)($token->bairro ?? '');
 		$codigoCnaePrest = (string)($empresa->cnae ?? ($servico->codigo_cnae ?? ''));
 		$tokenPrestador = trim((string)$token->token);
 		$codigoAleatorio = str_pad((string)random_int(0, 99999999), 8, '0', STR_PAD_LEFT);
+
+		// ============================
+		// BLOC VALORES SERVIÇO (NO PADRÃO QUE JÁ FUNCIONOU)
+		// ============================
+		$valoresServico = [
+			'valor_deducoes'          => $format2($valorDeducoes),
+			'valor_pis'               => $format2($valorPis),
+			'valor_cofins'            => $format2($valorCofins),
+			'valor_inss'              => $format2($valorInss),
+			'valor_ir'                => $format2($valorIr),
+			'valor_csll'              => $format2($valorCsll),
+			'outras_retencoes'        => $format2($outrasRetencoes),
+			'valor_iss'               => $format2($valorIss),
+			'valor_aliquota'          => $format2($aliquotaIssPercent), // 2.00, 3.00, etc
+			'desconto_incondicionado' => $format2($descontoIncond),
+			'desconto_condicionado'   => $format2($descontoCond),
+		];
+
+		// Item
+		$itemServico = [
+			'codigo'                      => $itemListaServico,
+			'codigo_cnae'                 => (string)($servico->codigo_cnae ?? ''),
+			'codigo_tributacao_municipio' => (string)($servico->codigo_tributacao_municipio ?? ''),
+			'discriminacao'               => $this->retiraAcentos((string)$servico->discriminacao),
+			'quantidade'                  => '1',
+			'valor_unitario'              => $format2($valorServicos),
+			'valor_servicos'              => (float)$valorServicos,
+			'valor_aliquota'              => $format2($aliquotaIssPercent),
+		];
+
+
 
 		$numero = (!empty($nfse->numero_nfse) && (int)$nfse->numero_nfse > 0)
 			? (int)$nfse->numero_nfse
@@ -1912,97 +1954,88 @@ class NfseController extends Controller
 			? (int)$nfse->serie
 			: (int)($empresa->numero_serie_nfse ?? 1);
 
+
 		return [
 			'numero' => (string)$numero,
 			'serie' => (string)$numeroSerie,
 			'tipo' => '1',
-			'data_emissao' => date('Y-m-d\TH:i:sP'),
-			'competencia' => $competencia,
-			'natureza_operacao' => (string)($nfse->natureza_operacao ?? '1'),
-			'optante_simples_nacional' => $optanteSimples,
-			'incentivo_fiscal' => $incentivoFiscal,
-			'status' => '1',
-			'valores_nfse' => [
-				'base_calculo' => $format2($baseCalculo),
+			'data_emissao'           => date('Y-m-d\TH:i:sP'),
+			'competencia'            => $competencia,
+			'natureza_operacao'      => (string)($item->natureza_operacao ?? '1'),
+			'optante_simples_nacional' => $optanteSimples ? '1' : '0',
+			'incentivo_fiscal'       => $incentivoFiscal,
+			'status'                 => '1',
+			'outras_informacoes'     => $outrasInfo,
+			'valores_nfse'           => [
+				'base_calculo'      => $format2($baseCalculo),
 				'valor_liquido_nfse' => $format2($valorLiquidoNfse),
 			],
+			// === SERVIÇO NO FORMATO QUE A PREFEITURA ACEITOU ===
 			'servico' => [
 				'valor_servicos' => $format2($valorServicos),
-				'valores' => [
-					'valor_deducoes' => $format2($valorDeducoes),
-					'valor_pis' => $format2($valorPis),
-					'valor_cofins' => $format2($valorCofins),
-					'valor_inss' => $format2($valorInss),
-					'valor_ir' => $format2($valorIr),
-					'valor_csll' => $format2($valorCsll),
-					'outras_retencoes' => $format2($outrasRetencoes),
-					'valor_iss' => $format2($valorIss),
-					'valor_aliquota' => $format2($aliquotaIssPercent),
-					'desconto_incondicionado' => $format2($descontoIncond),
-					'desconto_condicionado' => $format2($descontoCond),
-				],
-				'iss_retido' => ((int)($servico->iss_retido ?? 0)) === 1,
+				'valores' => $valoresServico,
+				'iss_retido'         => ((int)($servico->iss_retido ?? 0)) === 1,
 				'item_lista_servico' => $itemListaServico,
-				'codigo_municipio' => (string)$codigoMunicipioEmitente,
-				'municipio_incidencia' => (string)$codigoMunicipioEmitente,
-				'exigibilidade_iss' => (string)($servico->exigibilidade_iss),
-				'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
-				'aliquota_issqn' => $format4($servico->aliquota_issqn),
-				'itens' => [[
-					'codigo' => $itemListaServico,
-					'codigo_cnae' => (string)($servico->codigo_cnae ?? ''),
-					'codigo_tributacao_municipio' => (string)($servico->codigo_tributacao_municipio ?? ''),
-					'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
-					'quantidade' => '1',
-					'valor_unitario' => $format2($valorServicos),
-					'valor_servicos' => (float)$valorServicos,
-					'valor_aliquota' => $format2($aliquotaIssPercent),
-				]],
+				'codigo_municipio'      => (string)$codigoMunicipioPrestacao,
+				'municipio_incidencia'  => (string)$codigoMunicipioIncidencia,
+				// se quiser aproximar do médico, poderia mandar:
+				// 'codigo_municipio_prestacao' => (string)$codigoMunicipioPrestacao,
+				'exigibilidade_iss'  => (string)$servico->exigibilidade_iss,
+				'discriminacao'      => $this->retiraAcentos((string)$servico->discriminacao),
+				// Fração da alíquota (0.0200 = 2%)
+				'aliquota_issqn'     => $format4($aliquotaIssqnFrac),
+				'itens' => [
+					$itemServico
+				],
 			],
+
 			'prestador' => [
-				'cnpj' => $cnpjPrest,
+				'cnpj'                => $cnpjPrest,
 				'inscricao_municipal' => $imPrest,
-				'razao_social' => $this->retiraAcentos($razaoPrest),
-				'nome_fantasia' => $this->retiraAcentos($fantasiaPrest),
-				'codigo_cnae' => $codigoCnaePrest,
+				'razao_social'        => $this->retiraAcentos($razaoPrest),
+				'nome_fantasia'       => $this->retiraAcentos($fantasiaPrest),
+				'codigo_cnae'         => $codigoCnaePrest,
 				'endereco' => [
-					'logradouro' => $this->retiraAcentos($logradouroPrest),
-					'numero' => $this->retiraAcentos($numeroPrest),
-					'complemento' => $this->retiraAcentos($complPrest),
-					'bairro' => $this->retiraAcentos($bairroPrest),
+					'logradouro'      => $this->retiraAcentos($logradouroPrest),
+					'numero'          => $this->retiraAcentos($numeroPrest),
+					'complemento'     => $this->retiraAcentos($complPrest),
+					'bairro'          => $this->retiraAcentos($bairroPrest),
 					'codigo_municipio' => (string)$codigoMunicipioEmitente,
-					'cep' => $cepPrest,
+					'cep'             => $cepPrest,
 				],
 				'contato' => [
-					'telefone' => $telefonePrest,
-					'email' => $emailPrest,
+					'telefone'        => $telefonePrest,
+					'email'           => $emailPrest,
 				],
 				'token' => $tokenPrestador,
 			],
+
 			'tomador' => [
 				'identificacao_tomador' => $isCpfTomador ? ['cpf' => $doc] : ['cnpj' => $doc],
 				($isCpfTomador ? 'cpf' : 'cnpj') => $doc,
 				'razao_social' => $this->retiraAcentos((string)$nfse->razao_social),
 				'endereco' => [
-					'logradouro' => $this->retiraAcentos((string)$nfse->rua),
-					'numero' => $this->retiraAcentos((string)$nfse->numero),
-					'complemento' => $this->retiraAcentos((string)($nfse->complemento ?? '')),
-					'bairro' => $this->retiraAcentos((string)$nfse->bairro),
+					'logradouro'       => $this->retiraAcentos((string)$nfse->rua),
+					'numero'           => $this->retiraAcentos((string)$nfse->numero),
+					'complemento'      => $this->retiraAcentos((string)($nfse->complemento ?? '')),
+					'bairro'           => $this->retiraAcentos((string)$nfse->bairro),
 					'codigo_municipio' => (string)($nfse->cidade->codigo ?? ''),
-					'uf' => (string)($nfse->cidade->uf ?? ''),
-					'cep' => preg_replace('/[^0-9]/', '', (string)$nfse->cep),
+					'uf'               => (string)($nfse->cidade->uf ?? ''),
+					'cep'              => preg_replace('/[^0-9]/', '', (string)$nfse->cep ?? ''),
 				],
 				'contato' => [
 					'telefone' => (string)($nfse->telefone ?? ''),
-					'email' => (string)($nfse->email ?? ''),
+					'email'    => (string)($nfse->email ?? ''),
 				],
 			],
+
 			'orgao_gerador' => [
 				'codigo_municipio' => (string)$codigoMunicipioEmitente,
 			],
-			'nacional' => true,
+
+			'nacional'       => true,
 			'codigo_aleatorio' => $codigoAleatorio,
-			'token_prestador' => $tokenPrestador,
+			'token_prestador'  => $tokenPrestador,
 		];
 	}
 
@@ -2050,8 +2083,7 @@ class NfseController extends Controller
 
 		try {
 			$resp = $sdk->substitui($payload);
-
-			dd($resp);
+			// dd($resp);
 
 			Log::info('NFSE SUBSTITUICAO - DEBUG estrutura retorno substitui', [
 				'tipo'          => gettype($resp),
@@ -2245,13 +2277,11 @@ class NfseController extends Controller
 			if (!empty($pdfCancel)) {
 				$pdfPathRel = 'nfse_cancelada_doc/' . $chaveLimpa . '.pdf';
 				@file_put_contents(public_path($pdfPathRel), base64_decode($pdfCancel));
-				$nfseAntiga->cancelamento_pdf_path = $pdfPathRel;
 			}
 
 			if (!empty($xmlCancel)) {
 				$xmlPathRel = 'nfse_cancelada_xml/' . $chaveLimpa . '.xml';
 				@file_put_contents(public_path($xmlPathRel), base64_decode($xmlCancel));
-				$nfseAntiga->cancelamento_xml_path = $xmlPathRel;
 			}
 
 			// Campos de controle do cancelamento
@@ -2264,7 +2294,6 @@ class NfseController extends Controller
 			// Log bruto do retorno (opcional)
 			$logPathRel = 'nfse_cancelada_log/' . $chaveLimpa . '.json';
 			@file_put_contents(public_path($logPathRel), json_encode($retorno));
-			$nfseAntiga->cancelamento_log_path = $logPathRel;
 		}
 
 		$nfseAntiga->save();
@@ -2315,27 +2344,42 @@ class NfseController extends Controller
 
 	public function previewPayload($id)
 	{
+
 		$business_id = request()->session()->get('user.business_id');
+		$empresa = Business::where('id', $business_id)->first();
+		$token = NfseConfig::where('empresa_id', $business_id)->first();
 
-		$empresa = Business::where('id', $business_id)->firstOrFail();
-		$token   = NfseConfig::where('empresa_id', $business_id)->firstOrFail();
+		$item = Nfse::findOrFail($id);
+		if ($item->estado === 'aprovado') {
+			return response()->json('Este documento esta aprovado', 401);
+		}
+		if ($item->estado === 'cancelado') {
+			return response()->json('Este documento esta cancelado', 401);
+		}
 
-		$item = Nfse::with('servico', 'cidade')
-			->where('empresa_id', $business_id)
-			->findOrFail($id);
+		if (!is_dir(public_path('nfse_doc'))) @mkdir(public_path('nfse_doc'), 0777, true);
+		if (!is_dir(public_path('nfse_pdf'))) @mkdir(public_path('nfse_pdf'), 0777, true);
+
+		$ambiente = (int) $empresa->ambiente;
+		$nfse = new NfseSdk([
+			'token' => trim((string) $token->token),
+			'ambiente' => $ambiente,
+			'options' => [
+				'debug'        => false,
+				'timeout'      => 60,
+				'port'         => 443,
+				'http_version' => CURL_HTTP_VERSION_NONE
+			],
+		]);
 
 		$servico = $item->servico;
 
 		// Helpers
-		$format2 = function ($v) {
-			return number_format((float)$v, 2, '.', '');
-		};
-		$format4 = function ($v) {
-			return number_format((float)$v, 4, '.', '');
-		};
+		$format2 = fn($v) => number_format((float)$v, 2, '.', '');
+		$format4 = fn($v) => number_format((float)$v, 4, '.', '');
 
 		// ============================
-		// IBGE emitente
+		// MUNICÍPIOS (emitente / prestação / tomador / incidência)
 		// ============================
 		$codigoMunicipioEmitente = null;
 		if (!empty($token->cidade_id)) {
@@ -2343,40 +2387,23 @@ class NfseController extends Controller
 			$codigoMunicipioEmitente = $city ? (string)$city->codigo : null;
 		}
 
-		// Regime no BD: 'simples' ou 'normal'
-		$regime = strtolower(trim((string)($token->regime ?? 'simples')));
-		$optanteSimples = $regime === 'simples';
-
-		if ($regime === 'simples') {
-			$optanteSimples = true;
-		} else {
-			$optanteSimples = false;
-		}
-
-		$isMei = $regime === 'mei';
-
-		// issRetido = 2 - não
-		// issRetido = 1 - sim
-		$issRetido = ((int)($servico->iss_retido ?? 2)) === 1;
-
-		// ============================
-		// MUNICÍPIO DA PRESTAÇÃO (local onde fez o serviço)
-		// ============================
+		// Local da prestação (se não tiver, cai no emitente)
 		$codigoMunicipioPrestacao = null;
 		if (!empty($servico->cidade_local_prestacao_servico_id)) {
 			$city = City::find($servico->cidade_local_prestacao_servico_id);
 			$codigoMunicipioPrestacao = $city ? (string)$city->codigo : null;
 		}
+		if (empty($codigoMunicipioPrestacao)) {
+			$codigoMunicipioPrestacao = $codigoMunicipioEmitente;
+		}
 
-		// Se não tiver cidade de prestação definida, podemos usar a cidade do tomador
+		// Cidade do tomador (se tiver)
 		$codigoMunicipioTomador = null;
 		if (!empty($item->cidade_id) && $item->cidade) {
 			$codigoMunicipioTomador = (string)($item->cidade->codigo ?? '');
 		}
 
-		// ============================
-		// MUNICÍPIO DE INCIDÊNCIA (quem recolhe o ISS)
-		// ============================
+		// Município de incidência (usa o helper que você já tem)
 		$itemListaServico = (string)$servico->codigo_servico;
 		$codigoMunicipioIncidencia = $this->definirMunicipioIncidencia(
 			$itemListaServico,
@@ -2385,59 +2412,51 @@ class NfseController extends Controller
 			$codigoMunicipioTomador
 		);
 
-		// Por padrão, alíquota é obrigatória
-		$deveInformarAliquotaISS = true;
+		// ============================
+		// REGIME / SIMPLES
+		// ============================
+		// No teu sistema só usa 'simples' e 'normal'
+		$regime = strtolower(trim((string)($token->regime ?? 'simples')));
+		$optanteSimples = ($regime === 'simples');
 
-		// Exceções onde pode ser 0%
-		// if ($isMei) {
-		// 	$deveInformarAliquotaISS = false;
-		// } elseif ($codigoMunicipioIncidencia === $codigoMunicipioEmitente) {
-		// 	$deveInformarAliquotaISS = false;
-		// }
-
-		// Tomador docs
+		// ============================
+		// DOCUMENTOS DO TOMADOR
+		// ============================
 		$doc = preg_replace('/[^0-9]/', '', (string)$item->documento);
-		$im = preg_replace('/[^0-9]/', '', (string)$item->im);
-		$ie = preg_replace('/[^0-9]/', '', (string)$item->ie);
 		$isCpfTomador = strlen($doc) === 11;
 
-		// Competência YYYY-MM
+		// Competência
 		$competencia = $servico->data_competencia
 			? \Carbon\Carbon::parse($servico->data_competencia)->format('Y-m-d\TH:i:sP')
 			: \Carbon\Carbon::now()->format('Y-m-d\TH:i:sP');
 
-		// Simples Nacional
 		$incentivoFiscal = false;
 		$outrasInfo = '';
 
+
+
 		// ============================
-		// CÁLCULOS DE VALORES
+		// CÁLCULOS
 		// ============================
 		$valorServicos = (float)$servico->valor_servico;
 		$valorDeducoes = (float)($servico->valor_deducoes ?? 0);
-		$baseCalculo = max($valorServicos - $valorDeducoes, 0);
-
-		// aliquota_iss = percentual (ex: 3.44)
-		// aliquota_issqn = fração (ex: 0.0344)
-		$aliquotaIssPercent = (float)($servico->aliquota_iss ?? 0);
-		$aliquotaIssqnFrac = (float)($servico->aliquota_issqn ?? 0);
-
-		// Se não precisa informar alíquota ISS, zera a fração para não gerar valor_iss
-		// if (!$deveInformarAliquotaISS) {
-		// 	$aliquotaIssPercent = 0;
-		// 	$aliquotaIssqnFrac = 0;
-		// }
-
-		$valorIss = $baseCalculo * ($aliquotaIssqnFrac / 100);
-
-		$valorPis = (float)($servico->valor_pis ?? 0);
-		$valorCofins = (float)($servico->valor_cofins ?? 0);
-		$valorInss = (float)($servico->valor_inss ?? 0);
-		$valorIr = (float)($servico->valor_ir ?? 0);
-		$valorCsll = (float)($servico->valor_csll ?? 0);
+		$valorPis      = (float)($servico->valor_pis ?? 0);
+		$valorCofins   = (float)($servico->valor_cofins ?? 0);
+		$valorInss     = (float)($servico->valor_inss ?? 0);
+		$valorIr       = (float)($servico->valor_ir ?? 0);
+		$valorCsll     = (float)($servico->valor_csll ?? 0);
 		$outrasRetencoes = (float)($servico->outras_retencoes ?? 0);
 		$descontoIncond = (float)($servico->desconto_incondicional ?? 0);
-		$descontoCond = (float)($servico->desconto_condicional ?? 0);
+		$descontoCond   = (float)($servico->desconto_condicional ?? 0);
+
+		$baseCalculo = max($valorServicos - $valorDeducoes, 0);
+
+		// No BD você salva 2, 3, 4, 5 (percentual)
+		$aliquotaIssPercent = (float)($servico->aliquota_iss ?? $servico->aliquota_issqn ?? 0);
+		// Fração para cálculo do ISS (0.02, 0.03, etc.)
+		$aliquotaIssqnFrac  = $aliquotaIssPercent > 0 ? $aliquotaIssPercent / 100.0 : 0.0;
+
+		$valorIss = $baseCalculo * $aliquotaIssqnFrac;
 
 		$valorLiquidoNfse = $baseCalculo
 			- $valorPis
@@ -2449,141 +2468,143 @@ class NfseController extends Controller
 			- $descontoIncond
 			- $descontoCond;
 
-		// Itens
-		$quantidadeItem = 1;
-		$valorUnitarioItem = $valorServicos;
-
-		// Numeração (igual enviar: próximo RPS)
-		$numero = (int)($empresa->numero_rps ?? 0) + 1;
-		$numeroSerie = (int)($empresa->numero_serie_nfse ?? 1);
-
-		// Prestador (Business)
+		// ============================
+		// PRESTADOR
+		// ============================
 		$cnpjPrest = preg_replace('/[^0-9]/', '', (string)$empresa->cnpj);
-		$imPrest = (string)($token->im ?? '');
+		$imPrest   = (string)($token->im ?? '');
 		$razaoPrest = (string)($token->razao_social ?? $empresa->name ?? '');
 		$fantasiaPrest = (string)($token->nome ?? $empresa->name ?? '');
 		$telefonePrest = (string)($token->telefone ?? '');
-		$emailPrest = (string)($token->email ?? '');
-		$cepPrest = preg_replace('/[^0-9]/', '', (string)($token->cep ?? ''));
+		$emailPrest    = (string)($token->email ?? '');
+		$cepPrest      = preg_replace('/[^0-9]/', '', (string)($token->cep ?? ''));
 		$logradouroPrest = (string)($token->rua ?? '');
-		$numeroPrest = (string)($token->numero ?? '');
-		$complPrest = (string)($token->complemento ?? '');
-		$bairroPrest = (string)($token->bairro ?? '');
+		$numeroPrest   = (string)($token->numero ?? '');
+		$complPrest    = (string)($token->complemento ?? '');
+		$bairroPrest   = (string)($token->bairro ?? '');
 		$codigoCnaePrest = (string)($empresa->cnae ?? ($servico->codigo_cnae ?? ''));
 		$tokenPrestador = trim((string)$token->token);
 		$codigoAleatorio = str_pad((string)random_int(0, 99999999), 8, '0', STR_PAD_LEFT);
 
 		// ============================
-		// BLOCO VALORES SERVIÇO
+		// BLOC VALORES SERVIÇO (NO PADRÃO QUE JÁ FUNCIONOU)
 		// ============================
 		$valoresServico = [
-			'valor_deducoes'           => $format2($valorDeducoes),
-			'valor_pis'                => $format2($valorPis),
-			'valor_cofins'             => $format2($valorCofins),
-			'valor_inss'               => $format2($valorInss),
-			'valor_ir'                 => $format2($valorIr),
-			'valor_csll'               => $format2($valorCsll),
-			'outras_retencoes'         => $format2($outrasRetencoes),
-			'valor_iss'                => $format2($valorIss),
-			'desconto_incondicionado'  => $format2($descontoIncond),
-			'desconto_condicionado'    => $format2($descontoCond),
+			'valor_deducoes'          => $format2($valorDeducoes),
+			'valor_pis'               => $format2($valorPis),
+			'valor_cofins'            => $format2($valorCofins),
+			'valor_inss'              => $format2($valorInss),
+			'valor_ir'                => $format2($valorIr),
+			'valor_csll'              => $format2($valorCsll),
+			'outras_retencoes'        => $format2($outrasRetencoes),
+			'valor_iss'               => $format2($valorIss),
+			'valor_aliquota'          => $format2($aliquotaIssPercent), // 2.00, 3.00, etc
+			'desconto_incondicionado' => $format2($descontoIncond),
+			'desconto_condicionado'   => $format2($descontoCond),
 		];
 
-		// Só informa valor_aliquota se a prefeitura exige
-		if ($deveInformarAliquotaISS) {
-			$valoresServico['valor_aliquota'] = $format2($aliquotaIssPercent);
-		}
-
-		// Item (estrutura da API)
+		// Item
 		$itemServico = [
 			'codigo'                      => $itemListaServico,
 			'codigo_cnae'                 => (string)($servico->codigo_cnae ?? ''),
 			'codigo_tributacao_municipio' => (string)($servico->codigo_tributacao_municipio ?? ''),
 			'discriminacao'               => $this->retiraAcentos((string)$servico->discriminacao),
-			'quantidade'                  => (string)$quantidadeItem,
-			'valor_unitario'              => $format2($valorUnitarioItem),
+			'quantidade'                  => '1',
+			'valor_unitario'              => $format2($valorServicos),
 			'valor_servicos'              => (float)$valorServicos,
+			'valor_aliquota'              => $format2($aliquotaIssPercent),
 		];
 
 		// ============================
-		// MONTAGEM DO PAYLOAD (IGUAL ENVIAR)
+		// NUMERAÇÃO
+		// ============================
+		$numero = (int)($empresa->numero_rps ?? 0) + 1;
+		$numeroSerie = (int)($empresa->numero_serie_nfse ?? 1);
+
+		// ============================
+		// MONTAGEM DO PAYLOAD
 		// ============================
 		$payload = [
-			'numero' => (string)$numero,
-			'serie'  => (string)$numeroSerie,
-			'tipo'   => '1',
-			'data_emissao' => date('Y-m-d\TH:i:sP'),
-			'competencia'  => $competencia,
-			'natureza_operacao' => (string)($item->natureza_operacao ?? '1'),
-			'optante_simples_nacional' => $optanteSimples,
-			'incentivo_fiscal' => $incentivoFiscal,
-			'status' => '1',
-			'outras_informacoes' => $outrasInfo,
-			'valores_nfse' => [
-				'base_calculo'       => $format2($baseCalculo),
+			'numero'                 => (string)$numero,
+			'serie'                  => (string)$numeroSerie,
+			'tipo'                   => '1',
+			'data_emissao'           => date('Y-m-d\TH:i:sP'),
+			'competencia'            => $competencia,
+			'natureza_operacao'      => (string)($item->natureza_operacao ?? '1'),
+			'optante_simples_nacional' => $optanteSimples ? '1' : '0',
+			'incentivo_fiscal'       => $incentivoFiscal,
+			'status'                 => '1',
+			'outras_informacoes'     => $outrasInfo,
+			'valores_nfse'           => [
+				'base_calculo'      => $format2($baseCalculo),
 				'valor_liquido_nfse' => $format2($valorLiquidoNfse),
 			],
+			// === SERVIÇO NO FORMATO QUE A PREFEITURA ACEITOU ===
 			'servico' => [
 				'valor_servicos' => $format2($valorServicos),
-				'valores' => [
-					'valor_servicos' => $format2($valorServicos),
-					'valores'        => $valoresServico,
-				],
-				'iss_retido' => ((int)($servico->iss_retido ?? 0)) === 1,
+				'valores' => $valoresServico,
+				'iss_retido'         => ((int)($servico->iss_retido ?? 0)) === 1,
 				'item_lista_servico' => $itemListaServico,
-				'codigo_municipio'    => (string)$codigoMunicipioPrestacao,
-				'municipio_incidencia' => (string)$codigoMunicipioIncidencia,
-				'exigibilidade_iss' => (string)($servico->exigibilidade_iss),
-				'discriminacao' => $this->retiraAcentos((string)$servico->discriminacao),
-				'aliquota_issqn' => $format4($aliquotaIssqnFrac),
+				'codigo_municipio'      => (string)$codigoMunicipioPrestacao,
+				'municipio_incidencia'  => (string)$codigoMunicipioIncidencia,
+				// se quiser aproximar do médico, poderia mandar:
+				// 'codigo_municipio_prestacao' => (string)$codigoMunicipioPrestacao,
+				'exigibilidade_iss'  => (string)$servico->exigibilidade_iss,
+				'discriminacao'      => $this->retiraAcentos((string)$servico->discriminacao),
+				// Fração da alíquota (0.0200 = 2%)
+				'aliquota_issqn'     => $format4($aliquotaIssqnFrac),
 				'itens' => [
-					$itemServico,
+					$itemServico
 				],
 			],
+
 			'prestador' => [
-				'cnpj' => $cnpjPrest,
+				'cnpj'                => $cnpjPrest,
 				'inscricao_municipal' => $imPrest,
-				'razao_social' => $this->retiraAcentos($razaoPrest),
-				'nome_fantasia' => $this->retiraAcentos($fantasiaPrest),
-				'codigo_cnae' => $codigoCnaePrest,
+				'razao_social'        => $this->retiraAcentos($razaoPrest),
+				'nome_fantasia'       => $this->retiraAcentos($fantasiaPrest),
+				'codigo_cnae'         => $codigoCnaePrest,
 				'endereco' => [
-					'logradouro' => $this->retiraAcentos($logradouroPrest),
-					'numero' => $this->retiraAcentos($numeroPrest),
-					'complemento' => $this->retiraAcentos($complPrest),
-					'bairro' => $this->retiraAcentos($bairroPrest),
+					'logradouro'      => $this->retiraAcentos($logradouroPrest),
+					'numero'          => $this->retiraAcentos($numeroPrest),
+					'complemento'     => $this->retiraAcentos($complPrest),
+					'bairro'          => $this->retiraAcentos($bairroPrest),
 					'codigo_municipio' => (string)$codigoMunicipioEmitente,
-					'cep' => $cepPrest,
+					'cep'             => $cepPrest,
 				],
 				'contato' => [
-					'telefone' => $telefonePrest,
-					'email' => $emailPrest,
+					'telefone'        => $telefonePrest,
+					'email'           => $emailPrest,
 				],
 				'token' => $tokenPrestador,
 			],
+
 			'tomador' => [
 				'identificacao_tomador' => $isCpfTomador ? ['cpf' => $doc] : ['cnpj' => $doc],
 				($isCpfTomador ? 'cpf' : 'cnpj') => $doc,
 				'razao_social' => $this->retiraAcentos((string)$item->razao_social),
 				'endereco' => [
-					'logradouro' => $this->retiraAcentos((string)$item->rua),
-					'numero' => $this->retiraAcentos((string)$item->numero),
-					'complemento' => $this->retiraAcentos((string)($item->complemento ?? '')),
-					'bairro' => $this->retiraAcentos((string)$item->bairro),
+					'logradouro'       => $this->retiraAcentos((string)$item->rua),
+					'numero'           => $this->retiraAcentos((string)$item->numero),
+					'complemento'      => $this->retiraAcentos((string)($item->complemento ?? '')),
+					'bairro'           => $this->retiraAcentos((string)$item->bairro),
 					'codigo_municipio' => (string)($item->cidade->codigo ?? ''),
-					'uf' => (string)($item->cidade->uf ?? ''),
-					'cep' => preg_replace('/[^0-9]/', '', (string)$item->cep ?? ''),
+					'uf'               => (string)($item->cidade->uf ?? ''),
+					'cep'              => preg_replace('/[^0-9]/', '', (string)$item->cep ?? ''),
 				],
 				'contato' => [
 					'telefone' => (string)($item->telefone ?? ''),
-					'email' => (string)($item->email ?? ''),
+					'email'    => (string)($item->email ?? ''),
 				],
 			],
+
 			'orgao_gerador' => [
 				'codigo_municipio' => (string)$codigoMunicipioEmitente,
 			],
-			'nacional' => true,
+
+			'nacional'       => true,
 			'codigo_aleatorio' => $codigoAleatorio,
-			'token_prestador' => $tokenPrestador,
+			'token_prestador'  => $tokenPrestador,
 		];
 
 
