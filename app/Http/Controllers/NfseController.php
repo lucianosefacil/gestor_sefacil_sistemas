@@ -743,9 +743,21 @@ class NfseController extends Controller
 				$codigoMunicipioEmitente = $city ? (string)$city->codigo : null;
 			}
 
-			$optanteSimples = ((int)($empresa->regime ?? 1)) === 1;
-			$issRetido = ((int)($servico->iss_retido ?? 0)) === 1; // <<< JÁ ESTAVA
+			// Regime no BD: 'simples' ou 'normal'
+			$regime = strtolower(trim((string)($token->regime ?? 'simples')));
+			$optanteSimples = $regime === 'simples';
 
+			if($regime === 'simples') {
+				$optanteSimples = true;
+			} else {
+				$optanteSimples = false;
+			}
+
+			$isMei = $regime === 'mei';
+
+			// issRetido = 2 - não
+			// issRetido = 1 - sim
+			$issRetido = ((int)($servico->iss_retido ?? 2)) === 1;
 			// ============================
 			// MUNICÍPIO DA PRESTAÇÃO (local onde fez o serviço)
 			// ============================
@@ -773,14 +785,26 @@ class NfseController extends Controller
 			);
 
 			// ISS devido a outro município: compara INCIDÊNCIA x LOCAL DA PRESTAÇÃO
-			$issDevidoOutroMunicipio =
-				$codigoMunicipioIncidencia
-				&& $codigoMunicipioPrestacao
-				&& $codigoMunicipioIncidencia !== $codigoMunicipioPrestacao; // <<< AJUSTE
+			// $issDevidoOutroMunicipio =
+			// 	$codigoMunicipioIncidencia
+			// 	&& $codigoMunicipioPrestacao
+			// 	&& $codigoMunicipioIncidencia !== $codigoMunicipioPrestacao; // <<< AJUSTE
 
 			// Quando ISS é devido a outro município, ou Simples + ISS retido,
 			// a prefeitura exige que a alíquota seja informada.
-			$deveInformarAliquotaISS = ($issDevidoOutroMunicipio || ($optanteSimples && $issRetido)); // <<< AJUSTE
+			// $deveInformarAliquotaISS = ($issDevidoOutroMunicipio || ($optanteSimples && $issRetido)); // <<< AJUSTE
+
+			// $isRegimeFixo = in_array($regime, ['fixo', 'fixo_mensal', 'fixo_iss'], true);
+
+			// Por padrão, alíquota é obrigatória
+			$deveInformarAliquotaISS = true;
+
+			// Exceções onde pode ser 0%
+			if ($isMei) {
+				$deveInformarAliquotaISS = false;
+			} elseif ($codigoMunicipioIncidencia === $codigoMunicipioEmitente) {
+				$deveInformarAliquotaISS = false;
+			}
 
 			// Tomador docs
 			$doc = preg_replace('/[^0-9]/', '', (string)$item->documento);
