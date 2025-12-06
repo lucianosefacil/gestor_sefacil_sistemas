@@ -797,7 +797,7 @@ class NfseController extends Controller
 			// $isRegimeFixo = in_array($regime, ['fixo', 'fixo_mensal', 'fixo_iss'], true);
 
 			// Por padrão, alíquota é obrigatória
-			$deveInformarAliquotaISS = true;
+			// $deveInformarAliquotaISS = true;
 
 			// Exceções onde pode ser 0%
 			// if ($isMei) {
@@ -831,7 +831,10 @@ class NfseController extends Controller
 			// aliquota_iss = percentual (ex: 3.44)
 			// aliquota_issqn = fração (ex: 0.0344)
 			$aliquotaIssPercent = (float)($servico->aliquota_iss ?? 0);
-			$aliquotaIssqnFrac = (float)($servico->aliquota_issqn ?? 0);
+
+			$aliquotaIssqnFrac = $aliquotaIssPercent > 0 ? $aliquotaIssPercent / 100.0 : 0.0;
+
+			// $aliquotaIssqnFrac = (float)($servico->aliquota_issqn ?? 0);
 
 			// Se não precisa informar alíquota ISS, zera a fração para não gerar valor_iss
 			// if (!$deveInformarAliquotaISS) { // <<< NOVO
@@ -839,7 +842,7 @@ class NfseController extends Controller
 			// 	$aliquotaIssqnFrac = 0;
 			// }
 
-			$valorIss = $baseCalculo * ($aliquotaIssqnFrac / 100);
+			$valorIss = $baseCalculo * $aliquotaIssqnFrac;
 
 			$valorPis = (float)($servico->valor_pis ?? 0);
 			$valorCofins = (float)($servico->valor_cofins ?? 0);
@@ -901,9 +904,7 @@ class NfseController extends Controller
 			];
 
 			// Só informa valor_aliquota (Aliquota no XML) se a prefeitura exige
-			if ($deveInformarAliquotaISS) { // <<< AJUSTE
-				$valoresServico['valor_aliquota'] = $format2($aliquotaIssPercent);
-			}
+			$valoresServico['valor_aliquota'] = $format2($aliquotaIssPercent);
 
 			// Item (estrutura da API)
 			$itemServico = [
@@ -2593,6 +2594,4 @@ class NfseController extends Controller
 			'payload' => $payload,
 		], 200, [], JSON_PRETTY_PRINT);
 	}
-
-
 }
