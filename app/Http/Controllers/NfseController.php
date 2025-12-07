@@ -1085,19 +1085,19 @@ class NfseController extends Controller
 	{
 		$item = Nfse::findOrFail($id);
 		if (($item)) {
-			// if ($item->url_pdf_nfse) {
-			// 	return redirect($item->url_pdf_nfse);
-			// } else {
-			if (file_exists(public_path('nfse_pdf/') . $item->chave . ".pdf")) {
-				$pdf = file_get_contents(public_path('nfse_pdf/') . $item->chave . ".pdf");
-				return response($pdf)
-					->header('Content-Type', 'application/pdf');
-			}
+			if ($item->url_pdf_nfse) {
+				return redirect($item->url_pdf_nfse);
+			} else {
+				if (file_exists(public_path('nfse_pdf/') . $item->chave . ".pdf")) {
+					$pdf = file_get_contents(public_path('nfse_pdf/') . $item->chave . ".pdf");
+					return response($pdf)
+						->header('Content-Type', 'application/pdf');
+				}
 
-			if ($item->url_pdf_rps) {
-				return redirect($item->url_pdf_rps);
+				if ($item->url_pdf_rps) {
+					return redirect($item->url_pdf_rps);
+				}
 			}
-			// }
 		} else {
 			return redirect('/403');
 		}
@@ -1374,7 +1374,7 @@ class NfseController extends Controller
 			}
 			// 2) se só vier "link_pdf" (URL), você pode manter o link na NFSe
 			//    e opcionalmente baixar o PDF dessa URL no futuro, se precisar.
-			
+
 
 			// Campos básicos de controle (opcional)
 			$nota->cancelamento_codigo      = $resp->codigo   ?? $nota->cancelamento_codigo;
@@ -1388,7 +1388,6 @@ class NfseController extends Controller
 			@file_put_contents(public_path($logPathRel), json_encode($resp));
 
 			$nota->save();
-
 		} catch (\Throwable $e) {
 			Log::error('NFSE CANCELAMENTO - Erro ao consultar/sincronizar cancelamento', [
 				'nfse_id'  => $nota->id ?? null,
