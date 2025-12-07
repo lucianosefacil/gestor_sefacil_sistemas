@@ -356,100 +356,28 @@ function consultar(id) {
   const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
   const url = '{{ route('nfse.consultar') }}';
 
-  // Mostrar loading
-  swal({ 
-    title: 'Consultando...', 
-    text: 'Aguarde enquanto consultamos o status da NFSe...', 
-    type: 'info', 
-    showConfirmButton: false, 
-    allowOutsideClick: false 
-  });
+  swal({ title: 'Consultando...', text: 'Aguarde...', type: 'info', showConfirmButton: false, allowOutsideClick: false });
 
   fetch(url, {
     method: 'POST',
     body: JSON.stringify({ id }),
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'X-CSRF-TOKEN': csrf
-    }
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf }
   })
   .then(response => response.json())
   .then(data => {
-    // Determinar tipo de alerta baseado no status
-    let tipoAlerta = 'info';
-    let titulo = 'Status da NFSe';
-    let html = '';
-
-    switch(data.status) {
-      case 'aprovado':
-        tipoAlerta = 'success';
-        titulo = '✅ NFSe Aprovada!';
-        html = `
-          <p><strong>Número:</strong> ${data.numero_nfse || '-'}</p>
-          <p><strong>Código de Verificação:</strong> ${data.codigo_verificacao || '-'}</p>
-          <p>${data.mensagem || ''}</p>
-        `;
-        break;
-      
-      case 'rejeitado':
-      case 'reprovado':
-        tipoAlerta = 'error';
-        titulo = '❌ NFSe Rejeitada';
-        html = `
-          <p><strong>Motivo:</strong> ${data.motivo || data.mensagem || 'Consulte a prefeitura para mais detalhes.'}</p>
-        `;
-        break;
-      
-      case 'cancelado':
-        tipoAlerta = 'warning';
-        titulo = '🚫 NFSe Cancelada';
-        html = `
-          <p><strong>Número:</strong> ${data.numero_nfse || '-'}</p>
-          <p>${data.mensagem || ''}</p>
-        `;
-        break;
-      
-      case 'processando':
-      case 'pendente':
-        tipoAlerta = 'info';
-        titulo = '⏳ Em Processamento';
-        html = `<p>${data.mensagem || 'A NFSe ainda está sendo processada. Tente novamente em alguns instantes.'}</p>`;
-        break;
-      
-      case 'erro':
-        tipoAlerta = 'error';
-        titulo = '❌ Erro na Consulta';
-        html = `<p>${data.mensagem || 'Ocorreu um erro ao consultar a NFSe.'}</p>`;
-        break;
-      
-      default:
-        tipoAlerta = 'info';
-        titulo = 'Status: ' + (data.status || 'Desconhecido');
-        html = `<p>${data.mensagem || 'Consulta realizada.'}</p>`;
+    if (data.sucesso && data.status === 'aprovado') {
+      swal({
+        title: '✅ NFSe Aprovada!',
+        html: `<p><strong>Número:</strong> ${data.numero_nfse}</p><p><strong>Código:</strong> ${data.codigo_verificacao}</p>`,
+        type: 'success'
+      }).then(() => location.reload());
+    } else if (data.status === 'rejeitado') {
+      swal({ title: '❌ NFSe Rejeitada', text: data.mensagem, type: 'error' });
+    } else {
+      swal({ title: 'Status', text: data.mensagem || 'Consulta realizada.', type: 'info' });
     }
-
-    swal({
-      title: titulo,
-      html: html,
-      type: tipoAlerta,
-      confirmButtonText: 'OK'
-    }).then(() => {
-      // Recarregar a página se o status mudou para aprovado, rejeitado ou cancelado
-      if (['aprovado', 'rejeitado', 'reprovado', 'cancelado'].includes(data.status)) {
-        location.reload();
-      }
-    });
   })
-  .catch(error => {
-    console.error('Error:', error);
-    swal({
-      title: 'Erro',
-      text: 'Não foi possível consultar a NFSe. Tente novamente.',
-      type: 'error',
-      confirmButtonText: 'OK'
-    });
-  });
+  .catch(error => swal({ title: 'Erro', text: 'Falha na consulta.', type: 'error' }));
 }
 
 
