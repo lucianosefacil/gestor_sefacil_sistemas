@@ -163,9 +163,9 @@
                 </a>
                 @endif
 
-                {{-- <a title="Consultar NFSe" class="btn btn-info btn-sm" onclick="consultar('{{ $n->id }}')">
+                <a title="Consultar NFSe" class="btn btn-info btn-sm" onclick="consultar('{{ $n->id }}')">
                   <i class="fa fa-search"></i>
-                </a> --}}
+                </a>
 
 								{{-- <a title="Clonar" class="btn btn-primary btn-sm" href="/nfse/clone/{{$n->id}}">
 								<i class="fa fa-copy"></i>
