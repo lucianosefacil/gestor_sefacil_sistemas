@@ -1153,7 +1153,6 @@ class NfseController extends Controller
 					'numero_nfse' => $item->numero_nfse,
 					'codigo_verificacao' => $item->codigo_verificacao,
 					'mensagem' => 'NFSe aprovada com sucesso!',
-					'data' => $object
 				], 200);
 			}
 
@@ -1165,7 +1164,6 @@ class NfseController extends Controller
 					'status' => 'rejeitado',
 					'mensagem' => $object->mensagem ?? 'NFSe foi rejeitada pela prefeitura.',
 					'motivo' => $object->motivo ?? $object->erro ?? null,
-					'data' => $object
 				], 200);
 			}
 
@@ -1177,7 +1175,6 @@ class NfseController extends Controller
 					'status' => 'cancelado',
 					'numero_nfse' => $item->numero_nfse,
 					'mensagem' => 'NFSe cancelada.',
-					'data' => $object
 				], 200);
 			}
 
@@ -1187,7 +1184,6 @@ class NfseController extends Controller
 					'sucesso' => true,
 					'status' => $object->status,
 					'mensagem' => 'NFSe está em processamento. Tente consultar novamente em alguns instantes.',
-					'data' => $object
 				], 200);
 			}
 
@@ -1196,7 +1192,6 @@ class NfseController extends Controller
 				'sucesso' => true,
 				'status' => $object->status ?? $item->estado,
 				'mensagem' => 'Consulta realizada.',
-				'data' => $object
 			], 200);
 
 
