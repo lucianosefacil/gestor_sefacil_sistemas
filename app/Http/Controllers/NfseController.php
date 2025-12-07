@@ -1120,16 +1120,20 @@ class NfseController extends Controller
 		try {
 			$response = $nfse->consulta(['chave' => $item->chave]);
 
-			$object = $response->info_nfse[0];
+			$object = $response;
 
-			if (isset($object->info_nfse)) {
-				$object = $object->info_nfse[0];
-			}
+			// if (isset($object->info_nfse)) {
+			// 	$object = $object->info_nfse[0];
+			// }
 
 			if (isset($object->codigo_verificacao)) {
 				$item->codigo_verificacao = $object->codigo_verificacao;
-				if (isset($object->pdf_nfse)) {
-					$item->url_pdf_nfse = $object->pdf_nfse;
+				if (!empty($object->pdf)) {
+					$pdf = base64_decode($object->pdf);
+					file_put_contents(public_path('nfse_pdf/') . $item->chave . '.pdf', $pdf);
+				}
+				if (!empty($object->link_pdf)) {
+					$item->url_pdf_nfse = $object->link_pdf;
 				}
 				$item->url_pdf_rps = $object->pdf_rps ?? null;
 				$item->url_xml = $object->xml ?? null;
@@ -1142,25 +1146,88 @@ class NfseController extends Controller
 					$xml = file_get_contents($item->url_xml);
 					file_put_contents(public_path('nfse_doc/') . "$item->uuid.xml", $xml);
 				}
+
+				return response()->json([
+					'sucesso' => true,
+					'status' => 'aprovado',
+					'numero_nfse' => $item->numero_nfse,
+					'codigo_verificacao' => $item->codigo_verificacao,
+					'mensagem' => 'NFSe aprovada com sucesso!',
+					'data' => $object
+				], 200);
 			}
 
 			if (($object->status ?? null) == "reprovado") {
 				$item->estado = 'rejeitado';
 				$item->save();
-				return response()->json($object, 401);
+				return response()->json([
+					'sucesso' => false,
+					'status' => 'rejeitado',
+					'mensagem' => $object->mensagem ?? 'NFSe foi rejeitada pela prefeitura.',
+					'motivo' => $object->motivo ?? $object->erro ?? null,
+					'data' => $object
+				], 200);
 			}
 
 			if (($object->status ?? null) == "cancelado") {
 				$item->estado = 'cancelado';
 				$item->save();
+				return response()->json([
+					'sucesso' => true,
+					'status' => 'cancelado',
+					'numero_nfse' => $item->numero_nfse,
+					'mensagem' => 'NFSe cancelada.',
+					'data' => $object
+				], 200);
 			}
 
+			// Status em processamento ou pendente
+			if (($object->status ?? null) == "processando" || ($object->status ?? null) == "pendente") {
+				return response()->json([
+					'sucesso' => true,
+					'status' => $object->status,
+					'mensagem' => 'NFSe está em processamento. Tente consultar novamente em alguns instantes.',
+					'data' => $object
+				], 200);
+			}
+
+			// Retorno genérico para outros casos
+			return response()->json([
+				'sucesso' => true,
+				'status' => $object->status ?? $item->estado,
+				'mensagem' => 'Consulta realizada.',
+				'data' => $object
+			], 200);
+
+
+
+			// if (($object->status ?? null) == "reprovado") {
+			// 	$item->estado = 'rejeitado';
+			// 	$item->save();
+			// 	return response()->json($object, 401);
+			// }
+
+			// if (($object->status ?? null) == "cancelado") {
+			// 	$item->estado = 'cancelado';
+			// 	$item->save();
+			// }
+
 			// retorno mais simples para ver o resultado no console do navegador
-			return response()->json($object, 200);
+			// return response()->json($object, 200);
 		} catch (\Throwable $th) {
-			return response()->json($th->getMessage(), 401);
+			return response()->json([
+				'sucesso' => false,
+				'status' => 'erro',
+				'mensagem' => $th->getMessage()
+			], 500);
+			// return response()->json($th->getMessage(), 401);
 		} catch (APIException $a) {
-			return response()->json($a->getMessage(), 401);
+			return response()->json([
+				'sucesso' => false,
+				'status' => 'erro',
+				'mensagem' => $a->getMessage()
+			], 500);
+			// return response()->json($a->getMessage(), 401);
 		}
 	}
 
