@@ -257,7 +257,7 @@
             <select name="cidade_local_prestacao_servico_id" class="form-control @error('cidade_local_prestacao_servico_id') is-invalid @enderror" required>
               @foreach(App\Models\City::all() as $c)
                 <option value="{{ $c->id }}"
-                  @if(old('cidade_local_prestacao_servico_id', isset($item)? $item->servico->cidade_local_prestacao_servico_id : null) == $c->id) selected @endif>
+                  @if(old('cidade_local_prestacao_servico_id', isset($item) && $item->servico ? $item->servico->cidade_local_prestacao_servico_id : (isset($nfseConfig) ? $nfseConfig->cidade_id : '')) == $c->id) selected @endif>
                   {{ $c->nome }} ({{ $c->uf }})
                 </option>
               @endforeach
@@ -694,7 +694,6 @@ $(document).ready(function() {
                 // Preenche cidade (select)
                 if (cliente.cidade_id) {
                     $('select[name="cidade_id"]').val(cliente.cidade_id).trigger('change');
-                    $('select[name="cidade_local_prestacao_servico_id"]').val(cliente.cidade_id).trigger('change');
                 }
                 
                 // Feedback visual
@@ -718,7 +717,6 @@ $(document).ready(function() {
         $('input[name="numero"]').val('');
         $('input[name="bairro"]').val('');
         $('select[name="cidade_id"]').val('').trigger('change');
-        $('select[name="cidade_local_prestacao_servico_id"]').val('').trigger('change');
     });
     
     // ====================================
