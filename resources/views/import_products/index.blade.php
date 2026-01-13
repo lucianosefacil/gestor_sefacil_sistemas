@@ -54,8 +54,50 @@
                 </div>
             </div>
             @endcomponent
+
+
+
+            {{-- SEÇÃO DE UPDATE DE PRODUTOS --}}
+@component('components.widget', ['class' => 'box-warning'])
+<h4><i class="fa fa-refresh"></i> Atualizar Produtos Existentes</h4>
+<p class="text-muted">Use esta opção para atualizar produtos já cadastrados via planilha exportada.</p>
+
+{!! Form::open(['url' => action('ImportProductsController@updateProducts'), 'method' => 'post', 'enctype' => 'multipart/form-data' ]) !!}
+<div class="row">
+    <div class="col-sm-6">
+        <div class="col-sm-8">
+            <div class="form-group">
+                {!! Form::label('name', 'Arquivo para atualizar:') !!}
+                {!! Form::file('products_update_csv', ['accept'=> '.xls, .xlsx, .csv', 'required' => 'required']); !!}
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <br>
+            <button type="submit" class="btn btn-warning">
+                <i class="fa fa-refresh"></i> Atualizar Produtos
+            </button>
         </div>
     </div>
+</div>
+{!! Form::close() !!}
+
+<div class="alert alert-info" style="margin-top: 15px;">
+    <i class="fa fa-info-circle"></i> 
+    <strong>Instruções:</strong>
+    <ul style="margin-top: 10px;">
+        <li>Exporte seus produtos em <strong>Relatórios > Exportar > Produtos</strong></li>
+        <li>Edite a planilha (NÃO altere a coluna <strong>ID</strong>)</li>
+        <li>Importe aqui para atualizar</li>
+        <li>Apenas campos diferentes serão atualizados</li>
+        <li>Campo <strong>estoque</strong> será ignorado</li>
+    </ul>
+</div>
+@endcomponent
+
+
+        </div>
+    </div>
+
     <div class="row">
         <div class="col-sm-12">
             @component('components.widget', ['class' => 'box-primary', 'title' => __('lang_v1.instructions')])
