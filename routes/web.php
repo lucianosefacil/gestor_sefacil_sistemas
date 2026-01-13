@@ -749,6 +749,8 @@ Route::middleware(['authh', 'auth', 'SetSessionData', 'language', 'timezone', 'A
     Route::get('/import-products', 'ImportProductsController@index');
     Route::post('/import-products/store', 'ImportProductsController@store');
 
+    Route::post('import-products/update', 'ImportProductsController@updateProducts')->name('import-products.update');
+
     //Sales Commission Agent
     Route::resource('sales-commission-agents', 'SalesCommissionAgentController');
 

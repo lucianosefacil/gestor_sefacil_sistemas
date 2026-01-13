@@ -385,7 +385,7 @@ class SellPosController extends Controller
     {
         // Preservar dados TEF originais antes de qualquer processamento
         $original_payment_data = $request->input('payment', []);
-        
+
         if (!auth()->user()->can('sell.create') && !auth()->user()->can('direct_sell.access')) {
             abort(403, 'Unauthorized action.');
         }
@@ -1318,8 +1318,8 @@ class SellPosController extends Controller
             $data_criacao = null;
             foreach ($data->locacaos as $locacao) {
                 $data_criacao = \Carbon\Carbon::parse($locacao->data_abertura);
-                $dias = !is_null($locacao->dias_total) 
-                    ? $locacao->dias_total 
+                $dias = !is_null($locacao->dias_total)
+                    ? $locacao->dias_total
                     : $locacao->dias_em_locacao;
                 $data_devolucao_locacao = $data_criacao->copy()->addDays($dias);
                 if (is_null($data_devolucao) || $data_devolucao_locacao->gt($data_devolucao)) {
@@ -1336,7 +1336,7 @@ class SellPosController extends Controller
                 }
             }
 
-            $output['html_content'] = view($layout, compact('receipt_details', 'cliente', 'data_criacao' ,'data_devolucao', 'observacao'))->render();
+            $output['html_content'] = view($layout, compact('receipt_details', 'cliente', 'data_criacao', 'data_devolucao', 'observacao'))->render();
         }
 
         return $output;
@@ -2003,12 +2003,21 @@ class SellPosController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
-        \Log::info('Entrou no update');
-        \Log::info('Dados recebidos:', $request->all());
+        // \Log::info('Entrou no update');
+        // \Log::info('Dados recebidos:', $request->all());
+
+        @set_time_limit(120);
+        @ini_set('memory_limit', '512M');
+
+        \Log::info('UPDATE PONTO 1 - Início', ['memory' => memory_get_usage(true) / 1024 / 1024 . ' MB']);
 
         try {
             $input = $request->except('_token');
             //status is send as quotation from edit sales screen.
+
+            \Log::info('UPDATE PONTO 2 - Após input', ['memory' => memory_get_usage(true) / 1024 / 1024 . ' MB']);
+
+
             $input['is_quotation'] = 0;
             if ($input['status'] == 'quotation') {
                 $input['status'] = 'draft';
@@ -2072,6 +2081,10 @@ class SellPosController extends Controller
 
             $is_direct_sale = false;
             if (!empty($input['products'])) {
+
+                \Log::info('UPDATE PONTO 3 - Dentro do if products', ['memory' => memory_get_usage(true) / 1024 / 1024 . ' MB', 'qtd_produtos' => count($input['products'])]);
+
+
                 //Get transaction value before updating.
                 $transaction_before = Transaction::find($id);
                 $status_before =  $transaction_before->status;
@@ -2167,10 +2180,15 @@ class SellPosController extends Controller
                 //Begin transaction
                 DB::beginTransaction();
 
+                \Log::info('UPDATE PONTO 4 - Após beginTransaction', ['memory' => memory_get_usage(true) / 1024 / 1024 . ' MB']);
+
+
                 $transaction = $this->transactionUtil->updateSellTransaction($id, $business_id, $input, $invoice_total, $user_id);
+                \Log::info('UPDATE PONTO 5 - Após updateSellTransaction', ['memory' => memory_get_usage(true) / 1024 / 1024 . ' MB']);
 
                 //Update Sell lines
                 $deleted_lines = $this->transactionUtil->createOrUpdateSellLines($transaction, $input['products'], $input['location_id'], true, $status_before);
+                \Log::info('UPDATE PONTO 6 - Após createOrUpdateSellLines', ['memory' => memory_get_usage(true) / 1024 / 1024 . ' MB']);
 
                 //Update update lines
                 $is_credit_sale = isset($input['is_credit_sale']) && $input['is_credit_sale'] == 1 ? true : false;
@@ -2198,6 +2216,7 @@ class SellPosController extends Controller
                 //Update payment status
                 $this->transactionUtil->updatePaymentStatus($transaction->id, $transaction->final_total);
 
+                \Log::info('UPDATE PONTO 7 - Após adjustProductStockForInvoice', ['memory' => memory_get_usage(true) / 1024 / 1024 . ' MB']);
 
                 // teste para alterar status do pagamento dentro de contas a receber quando é feito o update da locacao
                 if ($request->from_pos == 1) {
@@ -2211,7 +2230,7 @@ class SellPosController extends Controller
                             ]);
                     }
                 }
-                
+
                 //Update product stock
                 $this->productUtil->adjustProductStockForInvoice($status_before, $transaction, $input);
 
@@ -2227,7 +2246,14 @@ class SellPosController extends Controller
                     'location_id' => $input['location_id'],
                     'pos_settings' => $pos_settings
                 ];
-                $this->transactionUtil->adjustMappingPurchaseSell($status_before, $transaction, $business, $deleted_lines);
+
+                if ($status_before !== $transaction->status || !empty($deleted_lines)) {
+                    $this->transactionUtil->adjustMappingPurchaseSell($status_before, $transaction, $business, $deleted_lines);
+                } else {
+                    \Log::info('UPDATE - Pulando adjustMappingPurchaseSell (mesmo status, sem linhas deletadas)');
+                }
+                // $this->transactionUtil->adjustMappingPurchaseSell($status_before, $transaction, $business, $deleted_lines);
+                \Log::info('UPDATE PONTO 8 - Após adjustMappingPurchaseSell', ['memory' => memory_get_usage(true) / 1024 / 1024 . ' MB']);
 
                 if ($this->transactionUtil->isModuleEnabled('tables')) {
                     $transaction->res_table_id = request()->get('res_table_id');
@@ -2263,6 +2289,8 @@ class SellPosController extends Controller
                     ->log('edited');
 
                 DB::commit();
+                \Log::info('UPDATE PONTO 9 - Após commit', ['memory' => memory_get_usage(true) / 1024 / 1024 . ' MB']);
+
 
                 if ($request->input('is_save_and_print') == 1) {
                     $url = $this->transactionUtil->getInvoiceUrl($id, $business_id);

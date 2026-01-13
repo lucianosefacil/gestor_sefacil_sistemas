@@ -65,7 +65,7 @@ class ImportProductsController extends Controller
             ];
 
             return view('import_products.index')
-            ->with('notification', $output);
+                ->with('notification', $output);
         } else {
             return view('import_products.index');
         }
@@ -88,7 +88,7 @@ class ImportProductsController extends Controller
             if (!empty($notAllowed)) {
                 return $notAllowed;
             }
-            
+
             //Set maximum php execution time
             ini_set('max_execution_time', 0);
             ini_set('memory_limit', -1);
@@ -134,7 +134,7 @@ class ImportProductsController extends Controller
                     $product_array = [];
                     $product_array['business_id'] = $business_id;
                     $product_array['created_by'] = $user_id;
-                    
+
                     //Add name
                     $product_name = trim($value[0]);
                     if (!empty($product_name)) {
@@ -144,7 +144,7 @@ class ImportProductsController extends Controller
                         $error_msg = "O campo nome é obrigatório, linha: $row_no";
                         break;
                     }
-                    
+
                     //image name
                     $image_name = trim($value[28]);
                     if (!empty($image_name)) {
@@ -281,7 +281,7 @@ class ImportProductsController extends Controller
 
                     //Add enable stock
                     $enable_stock = trim($value[7]);
-                    if (in_array($enable_stock, [0,1])) {
+                    if (in_array($enable_stock, [0, 1])) {
                         $product_array['enable_stock'] = $enable_stock;
                     } else {
                         $is_valid =  false;
@@ -292,7 +292,7 @@ class ImportProductsController extends Controller
                     //Add product type
                     $product_type = strtolower(trim($value[13]));
 
-                    if (in_array($product_type, ['single','variable'])) {
+                    if (in_array($product_type, ['single', 'variable'])) {
                         $product_array['type'] = $product_type;
                     } else {
                         echo $row_no;
@@ -306,10 +306,10 @@ class ImportProductsController extends Controller
                     $unit_name = trim($value[2]);
                     if (!empty($unit_name)) {
                         $unit = Unit::where('business_id', $business_id)
-                        ->where(function ($query) use ($unit_name) {
-                            $query->where('short_name', $unit_name)
-                            ->orWhere('actual_name', $unit_name);
-                        })->first();
+                            ->where(function ($query) use ($unit_name) {
+                                $query->where('short_name', $unit_name)
+                                    ->orWhere('actual_name', $unit_name);
+                            })->first();
 
                         if (!empty($unit)) {
                             $product_array['unit_id'] = $unit->id;
@@ -341,8 +341,8 @@ class ImportProductsController extends Controller
                     $tax_amount = 0;
                     if (!empty($tax_name)) {
                         $tax = TaxRate::where('business_id', $business_id)
-                        ->where('name', $tax_name)
-                        ->first();
+                            ->where('name', $tax_name)
+                            ->first();
                         if (!empty($tax)) {
                             $product_array['tax'] = $tax->id;
                             $tax_amount = $tax->amount;
@@ -367,7 +367,7 @@ class ImportProductsController extends Controller
                     if ($product_array['enable_stock'] == 1) {
                         $product_array['alert_quantity'] = trim($value[8]);
                     }
-                    
+
 
                     //Add brand
                     //Check if brand exists else create new
@@ -407,8 +407,8 @@ class ImportProductsController extends Controller
                         $product_array['sku'] = $sku;
                         //Check if product with same SKU already exist
                         $is_exist = Product::where('sku', $product_array['sku'])
-                        ->where('business_id', $business_id)
-                        ->exists();
+                            ->where('business_id', $business_id)
+                            ->exists();
                         if ($is_exist) {
                             $is_valid = false;
                             $error_msg = "$sku já existe este código, linha: $row_no";
@@ -434,7 +434,7 @@ class ImportProductsController extends Controller
 
                     //Enable IMEI or Serial Number
                     $enable_sr_no = trim($value[23]);
-                    if (in_array($enable_sr_no, [0,1])) {
+                    if (in_array($enable_sr_no, [0, 1])) {
                         $product_array['enable_sr_no'] = $enable_sr_no;
                     } elseif (empty($enable_sr_no)) {
                         $product_array['enable_sr_no'] = 0;
@@ -474,7 +474,7 @@ class ImportProductsController extends Controller
                         }
 
                         //Calculate Selling price
-                        $selling_price = !empty(trim($value[19])) ? trim($value[19]) : 0 ;
+                        $selling_price = !empty(trim($value[19])) ? trim($value[19]) : 0;
 
                         //Calculate product prices
                         $product_prices = $this->calculateVariationPrices($dpp_exc_tax, $dpp_inc_tax, $selling_price, $tax_amount, $tax_type, $profit_margin);
@@ -484,7 +484,7 @@ class ImportProductsController extends Controller
                         $product_array['variation']['dpp_exc_tax'] = $product_prices['dpp_exc_tax'];
                         $product_array['variation']['dsp_inc_tax'] = $product_prices['dsp_inc_tax'];
                         $product_array['variation']['dsp_exc_tax'] = $product_prices['dsp_exc_tax'];
-                        
+
                         //Opening stock
                         if (!empty($value[20]) && $enable_stock == 1) {
                             $product_array['opening_stock_details']['quantity'] = trim($value[20]);
@@ -492,8 +492,8 @@ class ImportProductsController extends Controller
                             if (!empty(trim($value[21]))) {
                                 $location_name = trim($value[21]);
                                 $location = BusinessLocation::where('name', $location_name)
-                                ->where('business_id', $business_id)
-                                ->first();
+                                    ->where('business_id', $business_id)
+                                    ->first();
                                 if (!empty($location)) {
                                     $product_array['opening_stock_details']['location_id'] = $location->id;
                                 } else {
@@ -558,7 +558,7 @@ class ImportProductsController extends Controller
                                 $dpp_inc_tax[$k] = 0;
                             }
                         }
-                        
+
                         $dpp_exc_tax = [];
                         if (!empty($dpp_exc_tax_string)) {
                             $dpp_exc_tax = array_map('trim', explode(
@@ -622,11 +622,11 @@ class ImportProductsController extends Controller
 
                             if (empty($variation_value)) {
                                 $variation_value = VariationValueTemplate::create([
-                                  'name' => $v,
-                                  'variation_template_id' => $variation->id
-                              ]);
+                                    'name' => $v,
+                                    'variation_template_id' => $variation->id
+                                ]);
                             }
-                            
+
                             //Assign Values
                             $product_array['variation']['variations'][] = [
                                 'value' => $v,
@@ -655,8 +655,8 @@ class ImportProductsController extends Controller
                             if (!empty(trim($value[21]))) {
                                 $location_name = trim($value[21]);
                                 $location = BusinessLocation::where('name', $location_name)
-                                ->where('business_id', $business_id)
-                                ->first();
+                                    ->where('business_id', $business_id)
+                                    ->first();
                                 if (empty($location)) {
                                     $is_valid = false;
                                     $error_msg = "Nenhum local com nome '$location_name' encontrado em linha: $row_no";
@@ -670,7 +670,7 @@ class ImportProductsController extends Controller
                             foreach ($variation_os as $k => $v) {
                                 $product_array['variation']['variations'][$k]['opening_stock'] = $v;
                                 $product_array['variation']['variations'][$k]['opening_stock_exp_date'] = null;
-                                
+
                                 if (!empty($value[22])) {
                                     $product_array['variation']['variations'][$k]['opening_stock_exp_date'] = \Carbon::createFromFormat('m-d-Y', trim($value[22]))->format('Y-m-d');
                                 } else {
@@ -716,7 +716,7 @@ class ImportProductsController extends Controller
                             $imported_data[$index][27],
                             $business_id,
                             $product->id,
-                            $index+1
+                            $index + 1
                         );
 
                         //Product locations
@@ -726,114 +726,116 @@ class ImportProductsController extends Controller
                             foreach ($locations_array as $business_location) {
                                 foreach ($business_locations as $loc) {
                                     if (strtolower($loc->name) == strtolower(trim($business_location))) {
-                                     $location_ids[] = $loc->id;
-                                 }
-                             }
-                         }
-                         if (!empty($location_ids)) {
-                            $product->product_locations()->sync($location_ids);
+                                        $location_ids[] = $loc->id;
+                                    }
+                                }
+                            }
+                            if (!empty($location_ids)) {
+                                $product->product_locations()->sync($location_ids);
+                            }
                         }
-                    }
 
                         //Create single product variation
-                    if ($product->type == 'single') {
-                        $this->productUtil->createSingleProductVariation(
-                            $product,
-                            $product->sku,
-                            $variation_data['dpp_exc_tax'],
-                            $variation_data['dpp_inc_tax'],
-                            $variation_data['profit_percent'],
-                            $variation_data['dsp_exc_tax'],
-                            $variation_data['dsp_inc_tax']
-                        );
-                        if (!empty($opening_stock)) {
-                            $this->addOpeningStock($opening_stock, $product, $business_id);
-                        }
-                    } elseif ($product->type == 'variable') {
+                        if ($product->type == 'single') {
+                            $this->productUtil->createSingleProductVariation(
+                                $product,
+                                $product->sku,
+                                $variation_data['dpp_exc_tax'],
+                                $variation_data['dpp_inc_tax'],
+                                $variation_data['profit_percent'],
+                                $variation_data['dsp_exc_tax'],
+                                $variation_data['dsp_inc_tax']
+                            );
+                            if (!empty($opening_stock)) {
+                                $this->addOpeningStock($opening_stock, $product, $business_id);
+                            }
+                        } elseif ($product->type == 'variable') {
                             //Create variable product variations
-                        $this->productUtil->createVariableProductVariations(
-                            $product,
-                            [$variation_data],
-                            $business_id
-                        );
+                            $this->productUtil->createVariableProductVariations(
+                                $product,
+                                [$variation_data],
+                                $business_id
+                            );
 
-                        if (!empty($value[20]) && $enable_stock == 1) {
-                            $this->addOpeningStockForVariable($variation_data, $product, $business_id);
+                            if (!empty($value[20]) && $enable_stock == 1) {
+                                $this->addOpeningStockForVariable($variation_data, $product, $business_id);
+                            }
                         }
                     }
                 }
             }
+
+            $output = [
+                'success' => 1,
+                'msg' => __('product.file_imported_successfully')
+            ];
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::emergency("File:" . $e->getFile() . "Line:" . $e->getLine() . "Message:" . $e->getMessage());
+
+            $output = [
+                'success' => 0,
+                'msg' => $e->getMessage()
+            ];
+            return redirect('import-products')->with('notification', $output);
         }
-        
-        $output = ['success' => 1,
-        'msg' => __('product.file_imported_successfully')
-    ];
 
-    DB::commit();
-} catch (\Exception $e) {
-    DB::rollBack();
-    \Log::emergency("File:" . $e->getFile(). "Line:" . $e->getLine(). "Message:" . $e->getMessage());
+        return redirect('import-products')->with('status', $output);
+    }
 
-    $output = ['success' => 0,
-    'msg' => $e->getMessage()
-];
-return redirect('import-products')->with('notification', $output);
-}
-
-return redirect('import-products')->with('status', $output);
-}
-
-private function calculateVariationPrices($dpp_exc_tax, $dpp_inc_tax, $selling_price, $tax_amount, $tax_type, $margin)
-{
+    private function calculateVariationPrices($dpp_exc_tax, $dpp_inc_tax, $selling_price, $tax_amount, $tax_type, $margin)
+    {
 
         //Calculate purchase prices
-    if ($dpp_inc_tax == 0) {
-        $dpp_inc_tax = $this->productUtil->calc_percentage(
-            $dpp_exc_tax,
-            $tax_amount,
-            $dpp_exc_tax
-        );
-    }
-
-    if ($dpp_exc_tax == 0) {
-        $dpp_exc_tax = $this->productUtil->calc_percentage_base($dpp_inc_tax, $tax_amount);
-    }
-
-    if ($selling_price != 0) {
-        if ($tax_type == 'inclusive') {
-            $dsp_inc_tax = $selling_price;
-            $dsp_exc_tax = $this->productUtil->calc_percentage_base(
-                $dsp_inc_tax,
-                $tax_amount
-            );
-        } elseif ($tax_type == 'exclusive') {
-            $dsp_exc_tax = $selling_price;
-            $dsp_inc_tax = $this->productUtil->calc_percentage(
-                $selling_price,
+        if ($dpp_inc_tax == 0) {
+            $dpp_inc_tax = $this->productUtil->calc_percentage(
+                $dpp_exc_tax,
                 $tax_amount,
-                $selling_price
+                $dpp_exc_tax
             );
         }
-    } else {
-        $dsp_exc_tax = $this->productUtil->calc_percentage(
-            $dpp_exc_tax,
-            $margin,
-            $dpp_exc_tax
-        );
-        $dsp_inc_tax = $this->productUtil->calc_percentage(
-            $dsp_exc_tax,
-            $tax_amount,
-            $dsp_exc_tax
-        );
-    }
 
-    return [
-        'dpp_exc_tax' => $this->productUtil->num_f($dpp_exc_tax),
-        'dpp_inc_tax' => $this->productUtil->num_f($dpp_inc_tax),
-        'dsp_exc_tax' => $this->productUtil->num_f($dsp_exc_tax),
-        'dsp_inc_tax' => $this->productUtil->num_f($dsp_inc_tax)
-    ];
-}
+        if ($dpp_exc_tax == 0) {
+            $dpp_exc_tax = $this->productUtil->calc_percentage_base($dpp_inc_tax, $tax_amount);
+        }
+
+        if ($selling_price != 0) {
+            if ($tax_type == 'inclusive') {
+                $dsp_inc_tax = $selling_price;
+                $dsp_exc_tax = $this->productUtil->calc_percentage_base(
+                    $dsp_inc_tax,
+                    $tax_amount
+                );
+            } elseif ($tax_type == 'exclusive') {
+                $dsp_exc_tax = $selling_price;
+                $dsp_inc_tax = $this->productUtil->calc_percentage(
+                    $selling_price,
+                    $tax_amount,
+                    $selling_price
+                );
+            }
+        } else {
+            $dsp_exc_tax = $this->productUtil->calc_percentage(
+                $dpp_exc_tax,
+                $margin,
+                $dpp_exc_tax
+            );
+            $dsp_inc_tax = $this->productUtil->calc_percentage(
+                $dsp_exc_tax,
+                $tax_amount,
+                $dsp_exc_tax
+            );
+        }
+
+        return [
+            'dpp_exc_tax' => $this->productUtil->num_f($dpp_exc_tax),
+            'dpp_inc_tax' => $this->productUtil->num_f($dpp_inc_tax),
+            'dsp_exc_tax' => $this->productUtil->num_f($dsp_exc_tax),
+            'dsp_inc_tax' => $this->productUtil->num_f($dsp_inc_tax)
+        ];
+    }
 
     /**
      * Adds opening stock of a single product
@@ -846,9 +848,9 @@ private function calculateVariationPrices($dpp_exc_tax, $dpp_inc_tax, $selling_p
     private function addOpeningStock($opening_stock, $product, $business_id)
     {
         $user_id = request()->session()->get('user.id');
-        
+
         $variation = Variation::where('product_id', $product->id)
-        ->first();
+            ->first();
 
         $total_before_tax = $opening_stock['quantity'] * $variation->dpp_inc_tax;
 
@@ -892,17 +894,18 @@ private function calculateVariationPrices($dpp_exc_tax, $dpp_inc_tax, $selling_p
 
         //Add product location
         $this->__addProductLocation($product, $opening_stock['location_id']);
-        
     }
 
     private function __addProductLocation($product, $location_id)
     {
         $count = DB::table('product_locations')->where('product_id', $product->id)
-        ->where('location_id', $location_id)
-        ->count();
+            ->where('location_id', $location_id)
+            ->count();
         if ($count == 0) {
-            DB::table('product_locations')->insert(['product_id' => $product->id, 
-                'location_id' => $location_id]);
+            DB::table('product_locations')->insert([
+                'product_id' => $product->id,
+                'location_id' => $location_id
+            ]);
         }
     }
 
@@ -939,8 +942,8 @@ private function calculateVariationPrices($dpp_exc_tax, $dpp_inc_tax, $selling_p
             foreach ($variations['variations'] as $variation_os) {
                 if (!empty($variation_os['opening_stock'])) {
                     $variation = Variation::where('product_id', $product->id)
-                    ->where('name', $variation_os['value'])
-                    ->first();
+                        ->where('name', $variation_os['value'])
+                        ->first();
                     if (!empty($variation)) {
                         $opening_stock = [
                             'quantity' => $variation_os['opening_stock'],
@@ -1016,5 +1019,248 @@ private function calculateVariationPrices($dpp_exc_tax, $dpp_inc_tax, $selling_p
                 $this->productUtil->addRackDetails($business_id, $product_id, $rack_details);
             }
         }
+    }
+
+
+    /**
+     * Atualiza produtos existentes via planilha
+     */
+    public function updateProducts(Request $request)
+    {
+        if (!auth()->user()->can('product.update')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        try {
+            ini_set('max_execution_time', 0);
+            ini_set('memory_limit', '512M');
+
+            if (!$request->hasFile('products_update_csv')) {
+                throw new \Exception('Arquivo não enviado');
+            }
+
+            $file = $request->file('products_update_csv');
+            $parsed_array = Excel::toArray([], $file);
+            $imported_data = array_splice($parsed_array[0], 1); // Remove header
+
+            $business_id = $request->session()->get('user.business_id');
+
+            $updated = 0;
+            $skipped = 0;
+            $errors = [];
+
+            DB::beginTransaction();
+
+            // Pré-carregar lookups para performance
+            $categories = Category::where('business_id', $business_id)
+                ->where('category_type', 'product')
+                ->pluck('id', 'name')
+                ->toArray();
+
+            $brands = Brands::where('business_id', $business_id)
+                ->pluck('id', 'name')
+                ->toArray();
+
+            $taxes = TaxRate::where('business_id', $business_id)
+                ->pluck('id', 'name')
+                ->toArray();
+
+            foreach ($imported_data as $row_no => $row) {
+                $line_no = $row_no + 2; // +2 porque começa do 0 e tem header
+
+                // Índice 0 = ID do produto
+                $product_id = trim($row[0] ?? '');
+
+                if (empty($product_id) || !is_numeric($product_id)) {
+                    $errors[] = "Linha $line_no: ID inválido";
+                    continue;
+                }
+
+                $product = Product::where('id', $product_id)
+                    ->where('business_id', $business_id)
+                    ->first();
+
+                if (!$product) {
+                    $errors[] = "Linha $line_no: Produto ID $product_id não encontrado";
+                    continue;
+                }
+
+                // Mapeamento: índice Excel => campo BD
+                $product_data = [];
+
+                // Campos diretos da tabela products
+                $direct_fields = [
+                    1 => 'name',                    // product
+                    // 7 => 'sku',
+                    8 => 'ncm',
+                    9 => 'cfop_interno',
+                    10 => 'cfop_externo',
+                    11 => 'cest',
+                    12 => 'image',
+                    13 => 'ecommerce',
+                    14 => 'perc_icms',
+                    15 => 'perc_pis',
+                    16 => 'perc_cofins',
+                    17 => 'perc_ipi',
+                    18 => 'pCredSN',
+                    19 => 'cst_csosn',
+                    20 => 'cst_pis',
+                    21 => 'cst_cofins',
+                    22 => 'cst_ipi',
+                    23 => 'perc_glp',
+                    24 => 'perc_gnn',
+                    25 => 'valor_partida',
+                    26 => 'cenq_ipi',
+                    27 => 'cBenef',
+                    28 => 'pRedBC',                 // Red BC
+                    29 => 'valor_ecommerce',
+                    30 => 'altura',
+                    31 => 'largura',
+                    32 => 'comprimento',
+                    33 => 'perc_icms_interestadual',
+                    34 => 'perc_icms_interno',
+                    35 => 'perc_fcp_interestadual',
+                    36 => 'pICMSST',
+                    37 => 'modBC',
+                    38 => 'modBCST',
+                    39 => 'enable_stock',
+                    40 => 'is_inactive',
+                    41 => 'not_for_selling',
+                    42 => 'product_custom_field3',
+                    43 => 'product_custom_field4',
+                    // 45 => 'codigo_barras',
+                ];
+
+                foreach ($direct_fields as $col => $field) {
+                    $new_value = isset($row[$col]) ? trim($row[$col]) : null;
+
+                    // Só atualiza se diferente
+                    if ($new_value !== null && $new_value !== '' && $this->normalizeForCompare($new_value) !== $this->normalizeForCompare($product->$field)) {
+                        $product_data[$field] = $new_value;
+                    }
+                }
+
+                // Campos que precisam converter nome para ID
+                // Categoria (índice 3)
+                $category_name = trim($row[3] ?? '');
+                if (!empty($category_name) && isset($categories[$category_name])) {
+                    if ($product->category_id != $categories[$category_name]) {
+                        $product_data['category_id'] = $categories[$category_name];
+                    }
+                }
+
+                // Sub-categoria (índice 4)
+                $sub_category_name = trim($row[4] ?? '');
+                if (!empty($sub_category_name) && isset($categories[$sub_category_name])) {
+                    if ($product->sub_category_id != $categories[$sub_category_name]) {
+                        $product_data['sub_category_id'] = $categories[$sub_category_name];
+                    }
+                }
+
+                // Marca (índice 5)
+                $brand_name = trim($row[5] ?? '');
+                if (!empty($brand_name) && isset($brands[$brand_name])) {
+                    if ($product->brand_id != $brands[$brand_name]) {
+                        $product_data['brand_id'] = $brands[$brand_name];
+                    }
+                }
+
+                // Taxa (índice 6)
+                $tax_name = trim($row[6] ?? '');
+                if (!empty($tax_name) && isset($taxes[$tax_name])) {
+                    if ($product->tax != $taxes[$tax_name]) {
+                        $product_data['tax'] = $taxes[$tax_name];
+                    }
+                }
+
+                // Atualizar produto se houver alterações
+                $has_changes = false;
+                if (!empty($product_data)) {
+                    $product->update($product_data);
+                    $has_changes = true;
+                }
+
+                // Atualizar Variation (preços e código de barras)
+                $variation = Variation::where('product_id', $product_id)->first();
+                if ($variation) {
+                    $variation_data = [];
+
+                    // cod_barras (índice 44)
+                    $cod_barras = trim($row[44] ?? '');
+                    if ($cod_barras !== '' && $cod_barras !== $variation->cod_barras) {
+                        $variation_data['cod_barras'] = $cod_barras;
+                    }
+
+                    // valor_venda (índice 47)
+                    $valor_venda = $this->parseNumber($row[47] ?? '');
+                    if ($valor_venda !== null && $valor_venda != $variation->sell_price_inc_tax) {
+                        $variation_data['sell_price_inc_tax'] = $valor_venda;
+                        $variation_data['default_sell_price'] = $valor_venda; // Atualiza também
+                    }
+
+                    // valor_compra (índice 48)
+                    $valor_compra = $this->parseNumber($row[48] ?? '');
+                    if ($valor_compra !== null && $valor_compra != $variation->dpp_inc_tax) {
+                        $variation_data['dpp_inc_tax'] = $valor_compra;
+                        $variation_data['default_purchase_price'] = $valor_compra;
+                    }
+
+                    if (!empty($variation_data)) {
+                        $variation->update($variation_data);
+                        $has_changes = true;
+                    }
+                }
+
+                if ($has_changes) {
+                    $updated++;
+                } else {
+                    $skipped++;
+                }
+            }
+
+            DB::commit();
+
+            $output = [
+                'success' => 1,
+                'msg' => "Atualização concluída! $updated produto(s) atualizado(s), $skipped sem alterações." .
+                    (count($errors) > 0 ? " Erros: " . count($errors) : "")
+            ];
+
+            if (count($errors) > 0) {
+                \Log::warning('Erros na atualização de produtos', ['errors' => $errors]);
+            }
+
+            return redirect('import-products')->with('status', $output);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::emergency("Erro update produtos: " . $e->getMessage());
+
+            $output = [
+                'success' => 0,
+                'msg' => 'Erro: ' . $e->getMessage()
+            ];
+
+            return redirect('import-products')->with('notification', $output);
+        }
+    }
+
+    /**
+     * Normaliza valor para comparação
+     */
+    private function normalizeForCompare($value)
+    {
+        if ($value === null) return '';
+        return strtolower(trim((string)$value));
+    }
+
+    /**
+     * Converte número da planilha para float
+     */
+    private function parseNumber($value)
+    {
+        if ($value === null || $value === '') return null;
+        $value = str_replace('.', '', $value); // Remove milhar
+        $value = str_replace(',', '.', $value); // Converte decimal BR
+        return is_numeric($value) ? (float)$value : null;
     }
 }
