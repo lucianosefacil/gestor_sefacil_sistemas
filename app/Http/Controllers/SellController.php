@@ -51,10 +51,14 @@ class SellController extends Controller
      * @param ProductUtils $product
      * @return void
      */
-    public function __construct(ContactUtil $contactUtil, BusinessUtil $businessUtil, TransactionUtil $transactionUtil, ModuleUtil $moduleUtil, ProductUtil $productUtil, 
-    CashRegisterUtil $cashRegisterUtil,
-    )
-    {
+    public function __construct(
+        ContactUtil $contactUtil,
+        BusinessUtil $businessUtil,
+        TransactionUtil $transactionUtil,
+        ModuleUtil $moduleUtil,
+        ProductUtil $productUtil,
+        CashRegisterUtil $cashRegisterUtil,
+    ) {
         $this->contactUtil = $contactUtil;
         $this->businessUtil = $businessUtil;
         $this->transactionUtil = $transactionUtil;
@@ -64,12 +68,24 @@ class SellController extends Controller
 
 
         $this->dummyPaymentLine = [
-            'method' => '', 'amount' => 0, 'note' => '',
-            'card_transaction_number' => '', 'card_number' => '', 'card_type' => '',
-            'card_holder_name' => '', 'card_month' => '', 'card_year' => '',
-            'card_security' => '', 'cheque_number' => '', 'bank_account_number' => '',
-            'is_return' => 0, 'transaction_no' => '', 'data_base' => date('d/m/Y'), 'intervalo' => '',
-            'vencimento' => date('d/m/Y'), 'qtd_parcelas' => 1
+            'method' => '',
+            'amount' => 0,
+            'note' => '',
+            'card_transaction_number' => '',
+            'card_number' => '',
+            'card_type' => '',
+            'card_holder_name' => '',
+            'card_month' => '',
+            'card_year' => '',
+            'card_security' => '',
+            'cheque_number' => '',
+            'bank_account_number' => '',
+            'is_return' => 0,
+            'transaction_no' => '',
+            'data_base' => date('d/m/Y'),
+            'intervalo' => '',
+            'vencimento' => date('d/m/Y'),
+            'qtd_parcelas' => 1
         ];
 
         $this->shipping_status_colors = [
@@ -105,6 +121,21 @@ class SellController extends Controller
             $with = [];
             $shipping_statuses = $this->transactionUtil->shipping_statuses();
             $sells = $this->transactionUtil->getListSells($business_id);
+
+
+
+            $limite = 5000;
+            $minId = Transaction::where('business_id', $business_id)
+                ->where('type', 'sell')
+                ->orderByDesc('id')
+                ->skip($limite - 1)
+                ->value('id');
+            if (!empty($minId)) {
+                $sells->where('transactions.id', '>=', $minId);
+            }
+            $sells->orderByDesc('transactions.id'); // ajuda a manter mais recente no topo
+
+
 
             $permitted_locations = auth()->user()->permitted_locations();
             if ($permitted_locations != 'all') {
@@ -297,33 +328,27 @@ class SellController extends Controller
                                     $html .= '<li><a target="_blank" href="' . action('SellController@editFiscal', [$row->id]) . '"><i class="fas fa-file"></i>Editar estado fiscal</a></li>';
                                 }
                             }
-                            
-                            
-                            
+
+
+
 
                             // if (auth()->user()->can("direct_sell.delete") || auth()->user()->can("sell.delete")) {
                             //     $html .= '<li><a href="' . action('SellPosController@destroy', [$row->id]) . '" class="delete-sale"><i class="fas fa-trash"></i> ' . __("messages.delete") . '</a></li>';
                             // }
-                            
-                            
-                            
-                              if (auth()->user()->can("direct_sell.delete") || auth()->user()->can("sell.delete")) {
-                            $t = Transaction::find($row->id);
-                            
-                            // Verifique se a venda não tem nota fiscal
-                            if ($t->numero_nfe <= 0 && $t->numero_nfce <= 0) {
-                                $html .= '<li><a href="' . action('SellPosController@destroy', [$row->id]) . '" class="delete-sale"><i class="fas fa-trash"></i> ' . __("messages.delete") . '</a></li>';
-                            } else {
-                                // Você pode optar por mostrar uma mensagem ou apenas não adicionar nada
-                                $html .= '<li class="text-muted"><i class=""></i> ' . __("") . '</li>';
-                            }
-                        }
 
-                            
-                            
-                            
-                            
-                            
+
+
+                            if (auth()->user()->can("direct_sell.delete") || auth()->user()->can("sell.delete")) {
+                                $t = Transaction::find($row->id);
+
+                                // Verifique se a venda não tem nota fiscal
+                                if ($t->numero_nfe <= 0 && $t->numero_nfce <= 0) {
+                                    $html .= '<li><a href="' . action('SellPosController@destroy', [$row->id]) . '" class="delete-sale"><i class="fas fa-trash"></i> ' . __("messages.delete") . '</a></li>';
+                                } else {
+                                    // Você pode optar por mostrar uma mensagem ou apenas não adicionar nada
+                                    $html .= '<li class="text-muted"><i class=""></i> ' . __("") . '</li>';
+                                }
+                            }
                         }
                         if (auth()->user()->can("sell.view") || auth()->user()->can("direct_sell.access")) {
                             $html .= '<li><a href="#" class="print-invoice" data-href="' . route('sell.printInvoice', [$row->id]) . '"><i class="fas fa-print" aria-hidden="true"></i> ' . __("messages.print") . '</a></li>
@@ -501,26 +526,26 @@ class SellController extends Controller
 
 
 
-                 // Alterado cor dos botões de acordo com a situação da nota, Por Sidney Henrique
+                // Alterado cor dos botões de acordo com a situação da nota, Por Sidney Henrique
                 ->addColumn('fiscal', function ($row) {
                     $t = Transaction::find($row->id);
                     $html = '';
-                    if($row->is_direct_sale == 1){
-                        if($t->estado == 'CANCELADO'){
-                            $html = '<a class="btn btn-xs btn-danger" href="/nfe/ver/'.$row->id.'"><i class="fa fa-eye"></i> NF-e Cancelada</a>';
-                        } elseif($t->numero_nfe > 0){
-                            $html = '<a class="btn btn-xs btn-success" href="/nfe/ver/'.$row->id.'"><i class="fa fa-eye"></i> Ver NF-e</a>';
+                    if ($row->is_direct_sale == 1) {
+                        if ($t->estado == 'CANCELADO') {
+                            $html = '<a class="btn btn-xs btn-danger" href="/nfe/ver/' . $row->id . '"><i class="fa fa-eye"></i> NF-e Cancelada</a>';
+                        } elseif ($t->numero_nfe > 0) {
+                            $html = '<a class="btn btn-xs btn-success" href="/nfe/ver/' . $row->id . '"><i class="fa fa-eye"></i> Ver NF-e</a>';
                         } else {
-                            $html = '<a class="btn btn-xs" style="background:#FF8C00; color:#fff;" href="'. route('nfe.novo', [$row->id]) .'"><i class="fa fa-file"></i> Gerar NF-e</a>';
+                            $html = '<a class="btn btn-xs" style="background:#FF8C00; color:#fff;" href="' . route('nfe.novo', [$row->id]) . '"><i class="fa fa-file"></i> Gerar NF-e</a>';
                         }
                     } else {
-                        if($t->estado == 'CANCELADO'){
-                            $html = '<a class="btn btn-xs btn-danger" href="'. route('nfce.ver', [$row->id]) .'"><i class="fa fa-eye"></i> NFC-e Cancelada</a>';
-                        } elseif($t->numero_nfce > 0){
-                            $html = '<a class="btn btn-xs btn-success" style="background:#4682B4; color:#fff;" href="'. route('nfce.ver', [$row->id]) .'"><i class="fa fa-eye"></i> Ver NFC-e</a>';
+                        if ($t->estado == 'CANCELADO') {
+                            $html = '<a class="btn btn-xs btn-danger" href="' . route('nfce.ver', [$row->id]) . '"><i class="fa fa-eye"></i> NFC-e Cancelada</a>';
+                        } elseif ($t->numero_nfce > 0) {
+                            $html = '<a class="btn btn-xs btn-success" style="background:#4682B4; color:#fff;" href="' . route('nfce.ver', [$row->id]) . '"><i class="fa fa-eye"></i> Ver NFC-e</a>';
                         } else {
-                            if(!$t->is_suspend){
-                                $html = '<a class="btn btn-xs" style="background:#FF8C00; color:#fff;" href="'. route('nfce.gerar', [$row->id]) .'"><i class="fa fa-file"></i> Gerar NFC-e</a>';
+                            if (!$t->is_suspend) {
+                                $html = '<a class="btn btn-xs" style="background:#FF8C00; color:#fff;" href="' . route('nfce.gerar', [$row->id]) . '"><i class="fa fa-file"></i> Gerar NFC-e</a>';
                             }
                         }
                     }
@@ -531,16 +556,15 @@ class SellController extends Controller
                 ->addColumn('fiscal_nfce', function ($row) {
                     $t = Transaction::find($row->id);
                     $html = '';
-                    if($row->is_direct_sale == 0){
-                        if($t->numero_nfce > 0){
-                            $html = '<a class="btn btn-xs btn-success" href="/nfce/ver/'.$row->id.'"><i class="fa fa-eye"></i> Ver NFCe</a>';
-                        }else{
-                            $html = '<a disabled class="btn btn-xs btn-warning" href="/pos/'.$row->id.'/edit">Venda Suspensa</a>';
-                            if(!$t->is_suspend){
-                                $html = '<a class="btn btn-xs" style="background:#F57C00; color:#fff; href="/nfce/gerar/'.$row->id.'"><i class="fa fa-file"></i> Gerar NFCe</a>';
+                    if ($row->is_direct_sale == 0) {
+                        if ($t->numero_nfce > 0) {
+                            $html = '<a class="btn btn-xs btn-success" href="/nfce/ver/' . $row->id . '"><i class="fa fa-eye"></i> Ver NFCe</a>';
+                        } else {
+                            $html = '<a disabled class="btn btn-xs btn-warning" href="/pos/' . $row->id . '/edit">Venda Suspensa</a>';
+                            if (!$t->is_suspend) {
+                                $html = '<a class="btn btn-xs" style="background:#F57C00; color:#fff; href="/nfce/gerar/' . $row->id . '"><i class="fa fa-file"></i> Gerar NFCe</a>';
                             }
                         }
-
                     }
                     return $html;
                 })
@@ -719,7 +743,7 @@ class SellController extends Controller
         $price_groups = SellingPriceGroup::forDropdown($business_id);
 
         $default_datetime = $this->businessUtil->format_date('now', true);
-        
+
         $pos_settings = empty($business_details->pos_settings) ? $this->businessUtil->defaultPosSettings() : json_decode($business_details->pos_settings, true);
 
         $invoice_schemes = InvoiceScheme::forDropdown($business_id);
@@ -1175,7 +1199,7 @@ class SellController extends Controller
         $warranties = $is_warranty_enabled ? Warranty::forDropdown($business_id) : [];
 
         $tipo = '';
-        if($transaction->is_locacao){
+        if ($transaction->is_locacao) {
             $tipo = 'locacao';
         }
 
@@ -1476,8 +1500,10 @@ class SellController extends Controller
 
         try {
             $input = $request->only([
-                'shipping_details', 'shipping_address',
-                'shipping_status', 'delivered_to'
+                'shipping_details',
+                'shipping_address',
+                'shipping_status',
+                'delivered_to'
             ]);
             $business_id = $request->session()->get('user.business_id');
 
