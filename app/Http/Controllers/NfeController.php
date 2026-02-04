@@ -694,12 +694,12 @@ class NfeController extends Controller
 				}
 				// teste de git
 				foreach ($notasAprovadas as $n) {
-
 					if (file_exists(public_path('xml_nfe/' . $cnpj . '/' . $n->chave . '.xml'))) {
 						$zip->addFile(public_path('xml_nfe/' . $cnpj . '/' . $n->chave . '.xml'), $n->chave . '.xml');
 					}
 				}
 				// Opcional: incluir PDF apenas se já existir, sem gerar aqui
+				$this->print($data_inicio, $data_final, $notasAprovadas);
 				$pdfPath = public_path("print_xml/") . "nfe_$cnpj.pdf";
 				if (file_exists($pdfPath)) {
 					$zip->addFile($pdfPath, "nfe_$cnpj.pdf");
@@ -756,7 +756,6 @@ class NfeController extends Controller
 
 	private function print($data_inicio, $data_final, $notasAprovadas)
 	{
-
 		$business_id = request()->session()->get('user.business_id');
 		$business = Business::findOrFail($business_id);
 		if (!is_dir(public_path('print_xml'))) {
@@ -784,7 +783,6 @@ class NfeController extends Controller
 		$business = Business::findOrFail($business_id);
 		$cnpj = preg_replace('/[^0-9]/', '', $business->cnpj);
 		if (file_exists(public_path("print_xml/") . "nfe_$cnpj.pdf")) {
-
 			return response()->download(public_path("print_xml/") . "nfe_$cnpj.pdf");
 		} else {
 			return redirect()->back()
@@ -797,18 +795,15 @@ class NfeController extends Controller
 
 	public function baixarZipXmlAprovado($location_id)
 	{
-
 		$business_id = request()->session()->get('user.business_id');
 		$business = Business::find($business_id);
 		if ($location_id) {
 			$config = BusinessLocation::findOrFail($location_id);
-
 			if ($config->cnpj != '00.000.000/0000-00' && $config->cnpj != '00000000000000') {
 				$business = $config;
 			}
 		}
 		$cnpj = preg_replace('/[^0-9]/', '', $business->cnpj);
-
 		if (file_exists(public_path('xml_nfe/' . $cnpj . '/' . 'xml.zip'))) {
 			return response()->download(public_path('xml_nfe/' . $cnpj . '/' . 'xml.zip'));
 		} else {

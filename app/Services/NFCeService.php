@@ -292,7 +292,9 @@ class NFCeService{
 
 			if($vOutro > 0){
 				if($itemCont < sizeof($venda->sell_lines)){
-					$totalVenda = $venda->valor_total;
+					// $totalVenda = $venda->valor_total;
+
+					$totalVenda = $venda->final_total + $venda->discount_amount;
 
 					$totalTroco = $venda->valor_total - $venda->valor_recebido;
 
