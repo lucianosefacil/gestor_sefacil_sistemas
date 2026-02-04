@@ -692,7 +692,7 @@ class NfeController extends Controller
 				if ($zip->open($zip_file, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
 					throw new \Exception('Falha ao abrir o ZIP');
 				}
-
+				// teste de git
 				foreach ($notasAprovadas as $n) {
 
 					if (file_exists(public_path('xml_nfe/' . $cnpj . '/' . $n->chave . '.xml'))) {
