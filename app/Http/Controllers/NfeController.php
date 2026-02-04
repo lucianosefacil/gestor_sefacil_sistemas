@@ -683,9 +683,15 @@ class NfeController extends Controller
 
 		if (sizeof($notasAprovadas) > 0) {
 			try {
-				$zip_file = public_path('xml_nfe/' . $cnpj . '/' . 'xml.zip');
+				$xml_dir = public_path('xml_nfe/' . $cnpj);
+				if (!is_dir($xml_dir)) {
+					mkdir($xml_dir, 0777, true);
+				}
+				$zip_file = $xml_dir . '/' . 'xml.zip';
 				$zip = new \ZipArchive();
-				$zip->open($zip_file, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+				if ($zip->open($zip_file, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+					throw new \Exception('Falha ao abrir o ZIP');
+				}
 
 				foreach ($notasAprovadas as $n) {
 
@@ -693,8 +699,11 @@ class NfeController extends Controller
 						$zip->addFile(public_path('xml_nfe/' . $cnpj . '/' . $n->chave . '.xml'), $n->chave . '.xml');
 					}
 				}
-				$this->print($data_inicio, $data_final, $notasAprovadas);
-				$zip->addFile(public_path("print_xml/") . "nfe_$cnpj.pdf", "nfe_$cnpj.pdf");
+				// Opcional: incluir PDF apenas se já existir, sem gerar aqui
+				$pdfPath = public_path("print_xml/") . "nfe_$cnpj.pdf";
+				if (file_exists($pdfPath)) {
+					$zip->addFile($pdfPath, "nfe_$cnpj.pdf");
+				}
 				$zip->close();
 			} catch (\Exception $e) {
 				array_push($msg, "Erro ao gerar arquivo de XML!!");
