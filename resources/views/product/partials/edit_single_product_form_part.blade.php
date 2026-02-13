@@ -49,9 +49,10 @@
 
 
                         <div class="col-sm-6">
-                          {!! Form::label('single_dpp_inc_tax', trans('product.inc_of_tax') . ':*' , ['id' => 'label_imposto_incluido']) !!}
+                          {{-- {!! Form::label('single_dpp_inc_tax', trans('product.inc_of_tax') . ':*' , ['id' => 'label_imposto_incluido']) !!} --}}
                         
-                          {!! Form::text('single_dpp_inc_tax', @num_format($variation->dpp_inc_tax), ['class' => 'form-control input-sm dpp_inc_tax input_number', 'id' => 'label_imposto_incluido', 'placeholder' => __('product.inc_of_tax'), 'required']); !!}
+                          {{-- {!! Form::text('single_dpp_inc_tax', @num_format($variation->dpp_inc_tax), ['class' => 'form-control input-sm dpp_inc_tax input_number', 'id' => 'label_imposto_incluido', 'placeholder' => __('product.inc_of_tax'), 'required']); !!} --}}
+                          {!! Form::hidden('single_dpp_inc_tax', @num_format($variation->dpp_inc_tax), ['id' => 'single_dpp_inc_tax', 'class' => 'input_number']); !!}
                         </div>
                     </td>
 

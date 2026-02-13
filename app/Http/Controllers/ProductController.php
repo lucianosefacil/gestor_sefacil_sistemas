@@ -77,11 +77,11 @@ class ProductController extends Controller
                 ->leftJoin('tax_rates', 'products.tax', '=', 'tax_rates.id')
                 ->join('variations as v', 'v.product_id', '=', 'products.id')
                 ->leftJoin('variation_location_details as vld', 'vld.variation_id', '=', 'v.id')
-                ->leftJoin('produto_skus as ps', 'ps.product_id', '=', 'products.id') 
+                ->leftJoin('produto_skus as ps', 'ps.product_id', '=', 'products.id')
                 ->leftJoin('products as associated_product', 'ps.produto_referenciado', '=', 'associated_product.id')
                 ->where('products.business_id', $business_id)
                 ->where('products.type', '!=', 'modifier')
-                ->select('products.*', 'associated_product.name as associated_product_name'); 
+                ->select('products.*', 'associated_product.name as associated_product_name');
 
             //Filter by location
             $location_id = request()->get('location_id', null);
@@ -253,7 +253,7 @@ class ProductController extends Controller
 
                     // teste para aparecer a descricao de produto associado 
                     if (!empty($row->associated_product_name)) {
-                            $product .= ' - <span style="color: #FF6347; font-weight: bold;">Associado ao Produto:</span> ' . $row->associated_product_name;
+                        $product .= ' - <span style="color: #FF6347; font-weight: bold;">Associado ao Produto:</span> ' . $row->associated_product_name;
                     }
                     // fim
 
@@ -493,8 +493,87 @@ class ProductController extends Controller
             $request->merge(['sell_price_inc_tax' => $request->single_dsp]);
 
             $form_fields = [
-                'name', 'brand_id', 'unit_id', 'category_id', 'tax', 'type', 'barcode_type', 'sku', 'alert_quantity', 'tax_type', 'weight', 'product_custom_field1', 'product_custom_field2', 'product_custom_field3', 'product_custom_field4', 'product_description', 'sub_unit_ids', 'perc_icms', 'perc_cofins', 'perc_pis', 'perc_ipi', 'cfop_interno', 'cfop_externo', 'cst_csosn', 'cst_pis', 'cst_cofins', 'cst_ipi', 'ncm', 'cest', 'codigo_barras', 'codigo_anp', 'perc_glp', 'perc_gnn', 'perc_gni', 'valor_partida', 'unidade_tributavel', 'quantidade_tributavel', 'tipo', 'veicProd', 'tpOp', 'chassi', 'cCor', 'xCor', 'pot', 'cilin', 'pesoL', 'pesoB', 'nSerie', 'tpComb', 'nMotor', 'CMT', 'dist', 'anoMod', 'anoFab', 'tpPint', 'tpVeic', 'espVeic', 'VIN', 'condVeic', 'cMod', 'cCorDENATRAN', 'lota', 'tpRest', 'ecommerce', 'destaque', 'novo', 'altura', 'largura', 'comprimento', 'valor_ecommerce', 'origem', 'cenq_ipi',
-                'perc_icms_interestadual', 'perc_icms_interno', 'perc_fcp_interestadual', 'pICMSST', 'modBC', 'modBCST', 'pCredSN', 'cBenef', 'pRedBec'
+                'name',
+                'brand_id',
+                'unit_id',
+                'category_id',
+                'tax',
+                'type',
+                'barcode_type',
+                'sku',
+                'alert_quantity',
+                'tax_type',
+                'weight',
+                'product_custom_field1',
+                'product_custom_field2',
+                'product_custom_field3',
+                'product_custom_field4',
+                'product_description',
+                'sub_unit_ids',
+                'perc_icms',
+                'perc_cofins',
+                'perc_pis',
+                'perc_ipi',
+                'cfop_interno',
+                'cfop_externo',
+                'cst_csosn',
+                'cst_pis',
+                'cst_cofins',
+                'cst_ipi',
+                'ncm',
+                'cest',
+                'codigo_barras',
+                'codigo_anp',
+                'perc_glp',
+                'perc_gnn',
+                'perc_gni',
+                'valor_partida',
+                'unidade_tributavel',
+                'quantidade_tributavel',
+                'tipo',
+                'veicProd',
+                'tpOp',
+                'chassi',
+                'cCor',
+                'xCor',
+                'pot',
+                'cilin',
+                'pesoL',
+                'pesoB',
+                'nSerie',
+                'tpComb',
+                'nMotor',
+                'CMT',
+                'dist',
+                'anoMod',
+                'anoFab',
+                'tpPint',
+                'tpVeic',
+                'espVeic',
+                'VIN',
+                'condVeic',
+                'cMod',
+                'cCorDENATRAN',
+                'lota',
+                'tpRest',
+                'ecommerce',
+                'destaque',
+                'novo',
+                'altura',
+                'largura',
+                'comprimento',
+                'valor_ecommerce',
+                'origem',
+                'cenq_ipi',
+                'perc_icms_interestadual',
+                'perc_icms_interno',
+                'perc_fcp_interestadual',
+                'pICMSST',
+                'modBC',
+                'modBCST',
+                'pCredSN',
+                'cBenef',
+                'pRedBec'
             ];
 
             $module_form_fields = $this->moduleUtil->getModuleFormField('product_form_fields');
@@ -575,7 +654,32 @@ class ProductController extends Controller
             }
 
             if ($product->type == 'single') {
-                $this->productUtil->createSingleProductVariation($product->id, $product->sku, $request->input('single_dpp'), $request->input('single_dpp_inc_tax'), $request->input('profit_percent'), $request->input('single_dsp'), $request->input('single_dsp_inc_tax'));
+
+                $single_dpp_inc_tax = $request->input('single_dpp_inc_tax');
+                // Fallback: se dpp_inc_tax vier vazio, calcular a partir do preço de compra + imposto
+                if (empty($single_dpp_inc_tax) || $single_dpp_inc_tax === null) {
+                    $purchase_price_value = $this->productUtil->num_uf($request->input('single_dpp'));
+                    $tax_id = $request->input('tax');
+                    $tax_rate = 0;
+                    if (!empty($tax_id)) {
+                        $tax = TaxRate::find($tax_id);
+                        $tax_rate = $tax ? $tax->amount : 0;
+                    }
+                    $single_dpp_inc_tax = $purchase_price_value + ($purchase_price_value * $tax_rate / 100);
+                }
+
+                $this->productUtil->createSingleProductVariation(
+                    $product->id,
+                    $product->sku,
+                    $request->input('single_dpp'),
+                    $single_dpp_inc_tax,
+                    $request->input('profit_percent'),
+                    $request->input('single_dsp'),
+                    $request->input('single_dsp_inc_tax')
+                );
+
+                // $this->productUtil->createSingleProductVariation($product->id, $product->sku, $request->input('single_dpp'), $request->input('single_dpp_inc_tax'), $request->input('profit_percent'), $request->input('single_dsp'), $request->input('single_dsp_inc_tax'));
+
             } elseif ($product->type == 'variable') {
                 if (!empty($request->input('product_variation'))) {
                     $input_variations = $request->input('product_variation');
@@ -863,17 +967,86 @@ class ProductController extends Controller
         try {
             $business_id = $request->session()->get('user.business_id');
             $product_details = $request->only([
-                'name', 'brand_id', 'unit_id', 'category_id', 'tax', 'barcode_type',
-                'sku', 'alert_quantity', 'tax_type', 'weight', 'product_custom_field1', 'product_custom_field2',
-                'product_custom_field3', 'product_custom_field4', 'product_description', 'sub_unit_ids', 'perc_icms',
-                'perc_pis', 'perc_cofins', 'perc_ipi', 'cfop_interno', 'cfop_externo', 'cst_csosn', 'cst_pis',
-                'cst_cofins', 'cst_ipi', 'ncm', 'cest', 'codigo_barras', 'codigo_anp', 'perc_glp', 'perc_gnn',
-                'perc_gni', 'valor_partida', 'unidade_tributavel', 'quantidade_tributavel', 'tipo', 'veicProd',
-                'tpOp', 'chassi', 'cCor', 'xCor', 'pot', 'cilin', 'pesoL', 'pesoB', 'nSerie', 'tpComb', 'nMotor',
-                'CMT', 'dist', 'anoMod', 'anoFab', 'tpPint', 'tpVeic', 'espVeic', 'VIN', 'condVeic', 'cMod',
-                'cCorDENATRAN', 'lota', 'tpRest', 'ecommerce', 'destaque', 'novo', 'altura', 'largura', 'comprimento',
-                'valor_ecommerce', 'origem', 'cenq_ipi', 'perc_icms_interestadual', 'perc_icms_interno',
-                'perc_fcp_interestadual', 'pICMSST', 'modBC', 'modBCST', 'pCredSN', 'cBenef', 'pRedBC'
+                'name',
+                'brand_id',
+                'unit_id',
+                'category_id',
+                'tax',
+                'barcode_type',
+                'sku',
+                'alert_quantity',
+                'tax_type',
+                'weight',
+                'product_custom_field1',
+                'product_custom_field2',
+                'product_custom_field3',
+                'product_custom_field4',
+                'product_description',
+                'sub_unit_ids',
+                'perc_icms',
+                'perc_pis',
+                'perc_cofins',
+                'perc_ipi',
+                'cfop_interno',
+                'cfop_externo',
+                'cst_csosn',
+                'cst_pis',
+                'cst_cofins',
+                'cst_ipi',
+                'ncm',
+                'cest',
+                'codigo_barras',
+                'codigo_anp',
+                'perc_glp',
+                'perc_gnn',
+                'perc_gni',
+                'valor_partida',
+                'unidade_tributavel',
+                'quantidade_tributavel',
+                'tipo',
+                'veicProd',
+                'tpOp',
+                'chassi',
+                'cCor',
+                'xCor',
+                'pot',
+                'cilin',
+                'pesoL',
+                'pesoB',
+                'nSerie',
+                'tpComb',
+                'nMotor',
+                'CMT',
+                'dist',
+                'anoMod',
+                'anoFab',
+                'tpPint',
+                'tpVeic',
+                'espVeic',
+                'VIN',
+                'condVeic',
+                'cMod',
+                'cCorDENATRAN',
+                'lota',
+                'tpRest',
+                'ecommerce',
+                'destaque',
+                'novo',
+                'altura',
+                'largura',
+                'comprimento',
+                'valor_ecommerce',
+                'origem',
+                'cenq_ipi',
+                'perc_icms_interestadual',
+                'perc_icms_interno',
+                'perc_fcp_interestadual',
+                'pICMSST',
+                'modBC',
+                'modBCST',
+                'pCredSN',
+                'cBenef',
+                'pRedBC'
             ]);
 
             DB::beginTransaction();
@@ -1038,7 +1211,7 @@ class ProductController extends Controller
             if ($product->type == 'single') {
 
                 $single_data = $request->only(['single_variation_id', 'single_dpp', 'single_dpp_inc_tax', 'single_dsp_inc_tax', 'profit_percent', 'single_dsp']);
-                
+
                 // Verificar se single_variation_id existe
                 if (!isset($single_data['single_variation_id'])) {
                     // Se não existe, buscar a primeira variação do produto
@@ -1046,7 +1219,7 @@ class ProductController extends Controller
                 } else {
                     $variation = Variation::find($single_data['single_variation_id']);
                 }
-                
+
                 // Se ainda não encontrou a variação, criar uma nova
                 if (!$variation) {
                     $variation = new Variation();
@@ -1057,13 +1230,31 @@ class ProductController extends Controller
                 }
 
 
+                // $variation->sub_sku = $product->sku;
+                // $variation->default_purchase_price = $this->productUtil->num_uf($single_data['single_dpp'] ?? 0);
+                // $variation->dpp_inc_tax = $this->productUtil->num_uf($single_data['single_dpp_inc_tax'] ?? 0);
+                // $variation->profit_percent = $this->productUtil->num_uf($single_data['profit_percent'] ?? 0);
+                // $variation->default_sell_price = $this->productUtil->num_uf($single_data['single_dsp'] ?? 0);
+                // // $variation->sell_price_inc_tax = $this->productUtil->num_uf($single_data['selling_price']);
+                // $variation->sell_price_inc_tax = $this->productUtil->num_uf($single_data['single_dsp'] ?? 0);
+                // $variation->save();
+
                 $variation->sub_sku = $product->sku;
                 $variation->default_purchase_price = $this->productUtil->num_uf($single_data['single_dpp'] ?? 0);
-                $variation->dpp_inc_tax = $this->productUtil->num_uf($single_data['single_dpp_inc_tax'] ?? 0);
+                $dpp_inc_tax_value = $this->productUtil->num_uf($single_data['single_dpp_inc_tax'] ?? 0);
+                if (empty($dpp_inc_tax_value) && $this->productUtil->num_uf($single_data['single_dpp'] ?? 0) > 0) {
+                    $purchase_price = $this->productUtil->num_uf($single_data['single_dpp']);
+                    $tax_rate = 0;
+                    if (!empty($product->tax)) {
+                        $tax = TaxRate::find($product->tax);
+                        $tax_rate = $tax ? $tax->amount : 0;
+                    }
+                    $dpp_inc_tax_value = $purchase_price + ($purchase_price * $tax_rate / 100);
+                }
+                $variation->dpp_inc_tax = $dpp_inc_tax_value;
                 $variation->profit_percent = $this->productUtil->num_uf($single_data['profit_percent'] ?? 0);
                 $variation->default_sell_price = $this->productUtil->num_uf($single_data['single_dsp'] ?? 0);
-                // $variation->sell_price_inc_tax = $this->productUtil->num_uf($single_data['selling_price']);
-                $variation->sell_price_inc_tax = $this->productUtil->num_uf($single_data['single_dsp'] ?? 0);
+                $variation->sell_price_inc_tax = $this->productUtil->num_uf($single_data['single_dsp_inc_tax'] ?? 0);
                 $variation->save();
 
                 Media::uploadMedia($product->business_id, $variation, $request, 'variation_images');
@@ -1178,7 +1369,7 @@ class ProductController extends Controller
                             dd($v);
                             if ($key > 0) {
                                 $variants = $produto->variants;
-                                for ($i = 0; $i < sizeof($variants); $i++) { 
+                                for ($i = 0; $i < sizeof($variants); $i++) {
                                     $dataProduct = [
                                         'price' => $v->default_sell_price,
                                         // "values" =>  [['pt' => $v->name]],
@@ -2382,8 +2573,13 @@ class ProductController extends Controller
             $query = Product::where('business_id', $api_settings->business_id)
                 ->active()
                 ->with([
-                    'brand', 'unit', 'category', 'sub_category',
-                    'product_variations', 'product_variations.variations', 'product_variations.variations.media',
+                    'brand',
+                    'unit',
+                    'category',
+                    'sub_category',
+                    'product_variations',
+                    'product_variations.variations',
+                    'product_variations.variations.media',
                     'product_variations.variations.variation_location_details' => function ($q) use ($location_id) {
                         $q->where('location_id', $location_id);
                     }

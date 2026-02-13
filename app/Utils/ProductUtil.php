@@ -53,15 +53,35 @@ class ProductUtil extends Util
         $product_variation = $product->product_variations()->create($product_variation_data);
 
         //create variations
+        // $variation_data = [
+        //     'name' => 'DUMMY',
+        //     'product_id' => $product->id,
+        //     'sub_sku' => $sku,
+        //     'default_purchase_price' => $this->num_uf($purchase_price),
+        //     'dpp_inc_tax' => $this->num_uf($dpp_inc_tax),
+        //     'profit_percent' => $this->num_uf($profit_percent),
+        //     'default_sell_price' => $this->num_uf($selling_price),
+        //     'sell_price_inc_tax' => $this->num_uf($selling_price),
+        //     'combo_variations' => $combo_variations
+        // ];
+
+        // $variation = $product_variation->variations()->create($variation_data);
+        $dpp_inc_tax_value = $this->num_uf($dpp_inc_tax);
+
+        // Se dpp_inc_tax estiver vazio, usar o mesmo valor do default_purchase_price
+        if (empty($dpp_inc_tax_value) && $this->num_uf($purchase_price) > 0) {
+            $dpp_inc_tax_value = $this->num_uf($purchase_price);
+        }
+
         $variation_data = [
             'name' => 'DUMMY',
             'product_id' => $product->id,
             'sub_sku' => $sku,
             'default_purchase_price' => $this->num_uf($purchase_price),
-            'dpp_inc_tax' => $this->num_uf($dpp_inc_tax),
+            'dpp_inc_tax' => $dpp_inc_tax_value,
             'profit_percent' => $this->num_uf($profit_percent),
             'default_sell_price' => $this->num_uf($selling_price),
-            'sell_price_inc_tax' => $this->num_uf($selling_price),
+            'sell_price_inc_tax' => $this->num_uf($selling_price_inc_tax), // CORRIGIDO: era $selling_price
             'combo_variations' => $combo_variations
         ];
         $variation = $product_variation->variations()->create($variation_data);

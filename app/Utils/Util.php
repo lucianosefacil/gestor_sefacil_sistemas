@@ -41,6 +41,28 @@ class Util
     //   $decimal_separator = session()->has('currency') ? session('currency')['decimal_separator'] : '';
     // }
 
+    // $thousand_separator  = '';
+    // $decimal_separator  = ',';
+
+    // $num = $input_number;
+
+    // if (str_contains($num, ".") && !str_contains($num, ",")) {
+    //   return (float)$num;
+    // }
+    // $num = str_replace('.', '', $input_number);
+    // $num = str_replace(',', '.', $num);
+
+    // // echo $num . "<br>";
+
+    // // $num = $input_number;
+    // // $num = str_replace($decimal_separator, '.', $num);
+
+    // return (float)$num;
+
+    if ($input_number === null || $input_number === '') {
+      return 0;
+    }
+
     $thousand_separator  = '';
     $decimal_separator  = ',';
 
@@ -51,11 +73,6 @@ class Util
     }
     $num = str_replace('.', '', $input_number);
     $num = str_replace(',', '.', $num);
-
-    // echo $num . "<br>";
-
-    // $num = $input_number;
-    // $num = str_replace($decimal_separator, '.', $num);
 
     return (float)$num;
   }
@@ -232,7 +249,7 @@ class Util
           $enabled_accounts[] = $key;
         }
       }
-      
+
       foreach ($payment_types as $key => $value) {
         if (!in_array($key, $enabled_accounts)) {
           unset($payment_types[$key]);
