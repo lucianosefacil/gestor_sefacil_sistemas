@@ -34,6 +34,7 @@ class NFeService
 
 		$soapCurl = new SoapCurl();
 		$soapCurl->httpVersion('1.1');
+		$soapCurl->timeout(40);
 		$this->tools->loadSoapClass($soapCurl);
 
 		$contigencia = $this->getContigencia();
@@ -42,6 +43,50 @@ class NFeService
 			$this->tools->contingency = $contingency;
 		}
 		$this->tools->model('55');
+	}
+
+	/**
+	 * Executa uma callable SOAP com retry automático em caso de falha de conexão transitória.
+	 *
+	 * @param callable $callback Função que executa a chamada SOAP
+	 * @param int $maxRetries Número máximo de tentativas
+	 * @param int $delaySeconds Delay entre tentativas (em segundos)
+	 * @return mixed Resultado da callable
+	 * @throws \Exception Se todas as tentativas falharem
+	 */
+	private function soapRetry(callable $callback, int $maxRetries = 3, int $delaySeconds = 2)
+	{
+		$lastException = null;
+
+		for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+			try {
+				return $callback();
+			} catch (\Throwable $e) {
+				$lastException = $e;
+				$msg = strtolower($e->getMessage());
+
+				$isTransient =
+					str_contains($msg, 'could not resolve host') ||
+					str_contains($msg, 'name resolution') ||
+					str_contains($msg, 'getaddrinfo') ||
+					str_contains($msg, 'resolve call failed') ||
+					str_contains($msg, 'could not connect') ||
+					str_contains($msg, "couldn't connect") ||
+					str_contains($msg, 'failed to connect') ||
+					str_contains($msg, 'connection timed out') ||
+					str_contains($msg, 'connection refused') ||
+					str_contains($msg, 'ssl connect error') ||
+					str_contains($msg, 'operation timed out');
+
+				if (!$isTransient || $attempt === $maxRetries) {
+					throw $lastException;
+				}
+
+				sleep($delaySeconds * $attempt); // 2s, 4s
+			}
+		}
+
+		throw $lastException;
 	}
 
 	private function getContigencia()
@@ -1161,7 +1206,9 @@ class NFeService
 
 			$iest = '';
 			$cpf = '';
-			$response = $this->tools->sefazCadastro($uf, $cnpj, $iest, $cpf);
+			$response = $this->soapRetry(function () use ($uf, $cnpj, $iest, $cpf) {
+				return $this->tools->sefazCadastro($uf, $cnpj, $iest, $cpf);
+			});
 
 			$stdCl = new Standardize($response);
 
@@ -1175,7 +1222,9 @@ class NFeService
 
 	public function consultaChave($chave)
 	{
-		$response = $this->tools->sefazConsultaChave($chave);
+		$response = $this->soapRetry(function () use ($chave) {
+			return $this->tools->sefazConsultaChave($chave);
+		});
 
 		$stdCl = new Standardize($response);
 		$arr = $stdCl->toArray();
@@ -1189,7 +1238,9 @@ class NFeService
 			$this->tools->model('55');
 
 			$chave = $venda->chave;
-			$response = $this->tools->sefazConsultaChave($chave);
+			$response = $this->soapRetry(function () use ($chave) {
+				return $this->tools->sefazConsultaChave($chave);
+			});
 
 			$stdCl = new Standardize($response);
 			$arr = $stdCl->toArray();
@@ -1211,7 +1262,9 @@ class NFeService
 			$nIni = $inutil->nNFIni;
 			$nFin = $inutil->nNFFin;
 			$xJust = $inutil->xJust;
-			$response = $this->tools->sefazInutiliza($nSerie, $nIni, $nFin, $xJust);
+			$response = $this->soapRetry(function () use ($nSerie, $nIni, $nFin, $xJust) {
+				return $this->tools->sefazInutiliza($nSerie, $nIni, $nFin, $xJust);
+			});
 
 			$stdCl = new Standardize($response);
 			$std = $stdCl->toStd();
@@ -1229,7 +1282,9 @@ class NFeService
 		try {
 
 			$chave = $venda->chave;
-			$response = $this->tools->sefazConsultaChave($chave);
+			$response = $this->soapRetry(function () use ($chave) {
+				return $this->tools->sefazConsultaChave($chave);
+			});
 			$stdCl = new Standardize($response);
 			$arr = $stdCl->toArray();
 			sleep(4);
@@ -1239,7 +1294,9 @@ class NFeService
 
 			$nProt = $arr['protNFe']['infProt']['nProt'];
 
-			$response = $this->tools->sefazCancela($chave, $xJust, $nProt);
+			$response = $this->soapRetry(function () use ($chave, $xJust, $nProt) {
+				return $this->tools->sefazCancela($chave, $xJust, $nProt);
+			});
 			sleep(2);
 			$stdCl = new Standardize($response);
 			$std = $stdCl->toStd();
@@ -1280,7 +1337,9 @@ class NFeService
 			$chave = $venda->chave;
 			$xCorrecao = $correcao;
 			$nSeqEvento = $venda->sequencia_cce + 1;
-			$response = $this->tools->sefazCCe($chave, $xCorrecao, $nSeqEvento);
+			$response = $this->soapRetry(function () use ($chave, $xCorrecao, $nSeqEvento) {
+				return $this->tools->sefazCCe($chave, $xCorrecao, $nSeqEvento);
+			});
 			sleep(5);
 
 			$stdCl = new Standardize($response);
@@ -1446,7 +1505,9 @@ class NFeService
 			$idLote = str_pad(100, 15, '0', STR_PAD_LEFT);
 
 			// Envio síncrono (indSinc = 1)
-			$resp = $this->tools->sefazEnviaLote([$signXml], $idLote, 1, false);
+			$resp = $this->soapRetry(function () use ($signXml, $idLote) {
+				return $this->tools->sefazEnviaLote([$signXml], $idLote, 1, false);
+			});
 			$std  = (new \NFePHP\NFe\Common\Standardize())->toStd($resp);
 
 			// --- base path único para todos os casos ---
@@ -1456,8 +1517,11 @@ class NFeService
 			// 1) Se vier 103 (lote recebido), consultar o recibo uma vez e prosseguir
 			if (isset($std->cStat) && $std->cStat == 103 && isset($std->infRec->nRec)) {
 				// pequeno wait para processamento
-				usleep(800000); // 0,8s
-				$protocolo = $this->tools->sefazConsultaRecibo($std->infRec->nRec);
+				sleep(8);
+				$nRec = $std->infRec->nRec;
+				$protocolo = $this->soapRetry(function () use ($nRec) {
+					return $this->tools->sefazConsultaRecibo($nRec);
+				});
 				$resp = $protocolo; // substitui para o toAuthorize funcionar depois
 				$std  = (new \NFePHP\NFe\Common\Standardize())->toStd($protocolo);
 			}
@@ -1495,6 +1559,7 @@ class NFeService
 			}
 
 			// 3.b) Autorizada -> gerar nfeProc e salvar
+			sleep(1);
 			$xmlAutorizado = \NFePHP\NFe\Complements::toAuthorize($signXml, $resp);
 			@file_put_contents("{$basePath}/{$chave}.xml", $xmlAutorizado);
 
@@ -1576,7 +1641,9 @@ class NFeService
 	public function consultaStatus($tpAmb, $uf)
 	{
 		try {
-			$response = $this->tools->sefazStatus($uf, $tpAmb);
+			$response = $this->soapRetry(function () use ($uf, $tpAmb) {
+				return $this->tools->sefazStatus($uf, $tpAmb);
+			});
 			$stdCl = new Standardize($response);
 			$arr = $stdCl->toArray();
 			return $arr;
