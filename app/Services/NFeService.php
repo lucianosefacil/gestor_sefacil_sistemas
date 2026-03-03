@@ -54,7 +54,7 @@ class NFeService
 	 * @return mixed Resultado da callable
 	 * @throws \Exception Se todas as tentativas falharem
 	 */
-	private function soapRetry(callable $callback, int $maxRetries = 3, int $delaySeconds = 2)
+	private function soapRetry(callable $callback, int $maxRetries = 5, int $delaySeconds = 3)
 	{
 		$lastException = null;
 
